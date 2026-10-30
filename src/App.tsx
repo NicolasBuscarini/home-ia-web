@@ -19,7 +19,8 @@ function AppContent() {
   const { t } = useI18n();
   const [screen, setScreen] = useState<ScreenState>('loading');
   const [role, setRole] = useState<UserRole>();
-  const [camera, setCamera] = useState<CameraStatus>();
+  const [cameras, setCameras] = useState<CameraStatus[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>();
   const [error, setError] = useState('');
   const [theme, setTheme] = useState<ThemeId>(readSavedTheme);
   const [clientCount, setClientCount] = useState<string>();
@@ -36,14 +37,18 @@ function AppContent() {
     setRole(user.role);
     setError('');
     if (user.role === 'User') {
-      setCamera(undefined);
+      setCameras([]);
+      setSelectedCameraId(undefined);
       setScreen('authenticated');
       return;
     }
-    const cameras = await getJson<CameraStatus[]>('/api/v1/cameras');
-    const activeCamera = cameras[0];
-    if (!activeCamera) throw new Error('Nenhuma câmera está disponível para esta conta.');
-    setCamera(activeCamera);
+    const cameraList = await getJson<CameraStatus[]>('/api/v1/cameras');
+    setCameras(cameraList);
+    setSelectedCameraId((current) =>
+      current && cameraList.some((cameraItem) => cameraItem.cameraId === current)
+        ? current
+        : cameraList[0]?.cameraId,
+    );
     setScreen('authenticated');
   }, []);
 
@@ -51,7 +56,8 @@ function AppContent() {
     const session = await getJson<{ authenticated: boolean }>('/api/v1/auth/session');
     if (!session.authenticated) {
       setRole(undefined);
-      setCamera(undefined);
+      setCameras([]);
+      setSelectedCameraId(undefined);
       setClientCount(undefined);
       setScreen('anonymous');
       return;
@@ -85,30 +91,40 @@ function AppContent() {
         if (!session.authenticated) {
           setScreen('anonymous');
           setRole(undefined);
-          setCamera(undefined);
+          setCameras([]);
+          setSelectedCameraId(undefined);
           setClientCount(undefined);
           return;
         }
-        const cameras = await getJson<CameraStatus[]>('/api/v1/cameras');
+        const cameraList = await getJson<CameraStatus[]>('/api/v1/cameras');
         if (!active) return;
-        const next = cameras[0];
-        if (!next) throw new Error('Nenhuma câmera está disponível para esta conta.');
-        // Updating only on changed camera fields avoids restarting HLS during every poll.
-        setCamera((current) =>
-          current &&
-          current.cameraId === next.cameraId &&
-          current.status === next.status &&
-          current.streamEpoch === next.streamEpoch &&
-          current.liveUrl === next.liveUrl
+        // Keep stable object references for unchanged items; the selected player must not restart
+        // on each catalog poll.
+        setCameras((current) => {
+          const previousById = new Map(current.map((item) => [item.cameraId, item]));
+          const next = cameraList.map((item) => {
+            const previous = previousById.get(item.cameraId);
+            return previous &&
+              previous.status === item.status &&
+              previous.streamEpoch === item.streamEpoch &&
+              previous.liveUrl === item.liveUrl
+              ? previous
+              : item;
+          });
+          return current.length === next.length && next.every((item, index) => item === current[index])
             ? current
-            : next,
+            : next;
+        });
+        setSelectedCameraId((current) =>
+          current && cameraList.some((item) => item.cameraId === current) ? current : cameraList[0]?.cameraId,
         );
       } catch (failure) {
         if (active) {
           if (failure instanceof ApiError && failure.status === 401) {
             setScreen('anonymous');
             setRole(undefined);
-            setCamera(undefined);
+            setCameras([]);
+            setSelectedCameraId(undefined);
             setClientCount(undefined);
           } else setError(t('app.error.offline'));
         }
@@ -177,7 +193,8 @@ function AppContent() {
       /* Cookie may already be expired. */
     }
     setRole(undefined);
-    setCamera(undefined);
+    setCameras([]);
+    setSelectedCameraId(undefined);
     setClientCount(undefined);
     setError('');
     setScreen('anonymous');
@@ -192,6 +209,8 @@ function AppContent() {
       setError(t('app.error.sessionCreated'));
     }
   }
+
+  const selectedCamera = cameras.find((item) => item.cameraId === selectedCameraId);
 
   return (
     <main className="container app-shell py-4 py-md-5">
@@ -211,8 +230,13 @@ function AppContent() {
       )}
       {screen === 'anonymous' && <AuthenticationPanel onAuthenticated={handleAuthenticated} />}
       {screen === 'authenticated' && role === 'User' && <UserLanding />}
-      {screen === 'authenticated' && role && role !== 'User' && camera && (
-        <Dashboard camera={camera} userRole={role} />
+      {screen === 'authenticated' && role && role !== 'User' && (
+        <Dashboard
+          cameras={cameras}
+          selectedCameraId={selectedCamera?.cameraId}
+          onCameraSelect={setSelectedCameraId}
+          userRole={role}
+        />
       )}
       {screen === 'error' && (
         <section className="panel-card feedback-panel" aria-labelledby="service-error-title">

@@ -1,7 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Profiler } from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Profiler, StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LivePlayer, PLAYER_BUFFER_LIMITS, selectPlaybackMode } from '../src/features/monitoring/LivePlayer';
+import { LivePlayer } from '../src/features/monitoring/LivePlayer';
+import { PLAYER_BUFFER_LIMITS, selectPlaybackMode } from '../src/features/monitoring/playback';
 import { I18nProvider } from '../src/i18n/i18n';
 
 afterEach(() => cleanup());
@@ -22,7 +24,7 @@ describe('live player startup and bounded updates', () => {
     expect(selectPlaybackMode(false, false)).toBe('unsupported');
   });
 
-  it('starts muted with autoplay enabled while keeping the HLS buffer window short', () => {
+  it('starts muted without native autoplay while keeping the HLS buffer window short', () => {
     render(
       <I18nProvider>
         <LivePlayer camera={camera} onStatusChange={() => {}} />
@@ -30,7 +32,7 @@ describe('live player startup and bounded updates', () => {
     );
 
     const video = screen.getByLabelText('Vídeo ao vivo da câmera');
-    expect(video).toHaveProperty('autoplay', true);
+    expect(video).toHaveProperty('autoplay', false);
     expect(video).toHaveProperty('muted', true);
     expect(PLAYER_BUFFER_LIMITS).toEqual({
       maxBufferLength: 12,
@@ -38,6 +40,76 @@ describe('live player startup and bounded updates', () => {
       maxMaxBufferLength: 18,
       maxBufferSize: 48_000_000,
     });
+  });
+
+  it('retries HLS initialization when StrictMode replays the mount effect', async () => {
+    render(
+      <StrictMode>
+        <I18nProvider>
+          <LivePlayer camera={capturingCamera} onStatusChange={() => {}} />
+        </I18nProvider>
+      </StrictMode>,
+    );
+
+    const video = screen.getByLabelText('Vídeo ao vivo da câmera');
+    await waitFor(() => expect(video.dataset.playerInitState).not.toBe('loading-hlsjs'));
+    expect(video.dataset.hlsSupported).toBeDefined();
+  });
+
+  it('reinitializes the selected stream when the camera changes even if URL and epoch match', () => {
+    const nextCamera = { ...capturingCamera, cameraId: 'side-entry' };
+    const { rerender } = render(
+      <I18nProvider>
+        <LivePlayer camera={capturingCamera} onStatusChange={() => {}} />
+      </I18nProvider>,
+    );
+    const video = screen.getByLabelText('Vídeo ao vivo da câmera');
+    expect(video).toHaveAttribute('data-camera-id', 'garage-01');
+
+    rerender(
+      <I18nProvider>
+        <LivePlayer camera={nextCamera} onStatusChange={() => {}} />
+      </I18nProvider>,
+    );
+
+    expect(video).toHaveAttribute('data-camera-id', 'side-entry');
+  });
+
+  it('keeps Play disabled until native media is ready to play', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    render(
+      <I18nProvider>
+        <LivePlayer camera={capturingCamera} onStatusChange={() => {}} />
+      </I18nProvider>,
+    );
+    const video = screen.getByLabelText('Vídeo ao vivo da câmera');
+    const playMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(video, 'play', { configurable: true, value: playMock });
+    const play = screen.getByRole('button', { name: 'Reproduzir vídeo' });
+    expect(play).toBeDisabled();
+
+    fireEvent.canPlay(video);
+    expect(play).toBeEnabled();
+    expect(playMock).toHaveBeenCalledOnce();
+  });
+
+  it('shows a format-specific message when the browser rejects media playback', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const user = userEvent.setup();
+    render(
+      <I18nProvider>
+        <LivePlayer camera={capturingCamera} onStatusChange={() => {}} />
+      </I18nProvider>,
+    );
+    const video = screen.getByLabelText('Vídeo ao vivo da câmera');
+    Object.defineProperty(video, 'play', {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(new DOMException('unsupported', 'NotSupportedError')),
+    });
+    fireEvent.canPlay(video);
+    await user.click(screen.getByRole('button', { name: 'Reproduzir vídeo' }));
+
+    expect(screen.getByText('Este navegador não oferece reprodução HLS/MSE compatível.')).toBeInTheDocument();
   });
 
   it('queues Go Live until the first seekable media range is available', async () => {

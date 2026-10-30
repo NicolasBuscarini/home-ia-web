@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useRef } from 'react';
 import { useI18n } from '../i18n/i18n';
 
-export type DashboardTab = 'monitor' | 'health' | 'dependencies' | 'capture';
+export type DashboardTab = 'monitor' | 'health' | 'dependencies' | 'capture' | 'users';
 
 interface DashboardTabsProps {
   active: DashboardTab;
@@ -17,6 +17,7 @@ export function DashboardTabs({ active, isAdmin, onChange }: DashboardTabsProps)
     { id: 'health', label: t('dashboard.tabs.health') },
     { id: 'dependencies', label: t('dashboard.tabs.dependencies') },
     { id: 'capture', label: t('dashboard.tabs.capture') },
+    { id: 'users', label: t('dashboard.tabs.users') },
   ];
   const tabs = isAdmin ? allTabs : allTabs.slice(0, 1);
 

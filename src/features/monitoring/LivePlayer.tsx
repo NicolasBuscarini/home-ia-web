@@ -3,23 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
+import { PLAYER_BUFFER_LIMITS, selectPlaybackMode } from './playback';
 
 interface LivePlayerProps {
   camera: CameraStatus;
   onStatusChange: (status: string) => void;
-}
-
-export const PLAYER_BUFFER_LIMITS = {
-  maxBufferLength: 12,
-  backBufferLength: 6,
-  maxMaxBufferLength: 18,
-  maxBufferSize: 48_000_000,
-} as const;
-
-export function selectPlaybackMode(hlsJsSupported: boolean, nativeHlsSupported: boolean) {
-  if (nativeHlsSupported) return 'native';
-  if (hlsJsSupported) return 'hls.js';
-  return 'unsupported';
 }
 
 function availability(status: string, t: ReturnType<typeof useI18n>['t']) {
@@ -66,6 +54,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | undefined>(undefined);
   const urlRef = useRef<string | undefined>(undefined);
+  const sourceSetupActiveRef = useRef(false);
   const playerInitializedRef = useRef(false);
   const wasPlayingRef = useRef(false);
   const pendingLiveSyncRef = useRef(false);
@@ -74,6 +63,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const [playerState, setPlayerState] = useState<'healthy' | 'pending' | 'degraded' | 'failed'>('pending');
   const [message, setMessage] = useState(t('player.message.controls'));
   const [playing, setPlaying] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(1);
   const [{ position, length, live }, setPlayback] = useState({ position: 0, length: 0, live: false });
@@ -85,6 +75,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     const video = videoRef.current;
     if (!video) return;
     const oldEpoch = video.dataset.streamEpoch ?? '';
+    const oldCameraId = video.dataset.cameraId ?? '';
     const returnedToCapture =
       camera.status === 'capturing' &&
       lastCaptureStatus.current !== undefined &&
@@ -92,15 +83,20 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     lastCaptureStatus.current = camera.status;
     if (
       camera.liveUrl === urlRef.current &&
+      oldCameraId === camera.cameraId &&
       camera.status === 'capturing' &&
       oldEpoch === (camera.streamEpoch ?? '') &&
+      sourceSetupActiveRef.current &&
       !returnedToCapture
     )
       return;
+    setMediaReady(false);
+    sourceSetupActiveRef.current = false;
+    const cameraChanged = oldCameraId !== camera.cameraId;
     const restart =
       playerInitializedRef.current &&
       camera.status === 'capturing' &&
-      (oldEpoch !== camera.streamEpoch || returnedToCapture);
+      (cameraChanged || oldEpoch !== camera.streamEpoch || returnedToCapture);
     const resume = restart && wasPlayingRef.current && !video.ended;
     const shouldAutoplay = !playerInitializedRef.current || resume;
     pendingLiveSyncRef.current = false;
@@ -110,29 +106,42 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     video.removeAttribute('src');
     video.load();
     urlRef.current = camera.liveUrl;
+    video.dataset.cameraId = camera.cameraId;
     video.dataset.streamEpoch = camera.streamEpoch ?? '';
     if (camera.status !== 'capturing') return;
-    playerInitializedRef.current = true;
 
     setPlayerState('pending');
     setPlayerStatus(translateRef.current('player.status.preparing'));
     let cancelled = false;
-    let loadedMetadataHandler: (() => void) | undefined;
+    let mediaReadyHandler: (() => void) | undefined;
+    mediaReadyHandler = () => {
+      video.dataset.playerInitState = 'media-ready';
+      setMediaReady(true);
+      setPlayerState('healthy');
+      setPlayerStatus(translateRef.current('player.status.playlistReceived'));
+      if (!shouldAutoplay) return;
+      const range = seekRange(video);
+      const hlsTarget = hlsRef.current?.liveSyncPosition;
+      const target = Number.isFinite(hlsTarget) ? hlsTarget : range ? range.end - 0.5 : undefined;
+      if (Number.isFinite(target)) video.currentTime = target as number;
+      void video.play().catch(() => setMessage(translateRef.current('player.message.autoplayBlocked')));
+    };
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      if (shouldAutoplay) {
-        loadedMetadataHandler = () => {
-          const range = seekRange(video);
-          if (range) video.currentTime = Math.max(range.start, range.end - 0.5);
-          void video.play().catch(() => setMessage(translateRef.current('player.message.autoplayBlocked')));
-        };
-        video.addEventListener('loadedmetadata', loadedMetadataHandler, { once: true });
-      }
+      video.dataset.playerInitState = 'native-source';
+      video.addEventListener('canplay', mediaReadyHandler, { once: true });
       video.src = camera.liveUrl;
+      sourceSetupActiveRef.current = true;
+      playerInitializedRef.current = true;
     } else {
+      video.dataset.playerInitState = 'loading-hlsjs';
       void import('hls.js')
         .then(({ default: HlsRuntime }) => {
           if (cancelled) return;
-          if (selectPlaybackMode(HlsRuntime.isSupported(), false) === 'unsupported') {
+          video.dataset.playerInitState = 'hlsjs-imported';
+          const supported = HlsRuntime.isSupported();
+          video.dataset.hlsSupported = String(supported);
+          if (selectPlaybackMode(supported, false) === 'unsupported') {
+            video.dataset.playerInitState = 'hlsjs-unsupported';
             setPlayerState('failed');
             setPlayerStatus(translateRef.current('player.status.unsupported'));
             setMessage(translateRef.current('player.message.unsupported'));
@@ -146,22 +155,19 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
             },
           });
           hlsRef.current = hls;
-          hls.loadSource(camera.liveUrl);
-          hls.attachMedia(video);
+          video.addEventListener('canplay', mediaReadyHandler as () => void, { once: true });
+          video.dataset.playerInitState = 'hlsjs-initialized';
+          hls.on(HlsRuntime.Events.MEDIA_ATTACHED, () => {
+            video.dataset.playerInitState = 'hlsjs-media-attached';
+          });
           hls.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
+            video.dataset.playerInitState = 'hlsjs-manifest-parsed';
             setPlayerStatus(translateRef.current('player.status.playlistReceived'));
-            setPlayerState('healthy');
-            if (shouldAutoplay) {
-              const target = hls.liveSyncPosition;
-              if (Number.isFinite(target)) video.currentTime = target as number;
-              void video
-                .play()
-                .catch(() => setMessage(translateRef.current('player.message.autoplayBlocked')));
-            }
           });
           hls.on(HlsRuntime.Events.ERROR, (_event, data) => {
             if (!data.fatal) return;
             const network = data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR;
+            video.dataset.playerInitState = network ? 'hlsjs-fatal-network' : 'hlsjs-fatal-media';
             setPlayerState('failed');
             setPlayerStatus(
               network
@@ -179,9 +185,17 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
             if (network) hls.startLoad();
             else hls.recoverMediaError();
           });
+          video.dataset.playerInitState = 'hlsjs-loading-source';
+          hls.loadSource(camera.liveUrl);
+          video.dataset.playerInitState = 'hlsjs-attaching-media';
+          hls.attachMedia(video);
+          sourceSetupActiveRef.current = true;
+          playerInitializedRef.current = true;
         })
         .catch(() => {
           if (!cancelled) {
+            sourceSetupActiveRef.current = false;
+            video.dataset.playerInitState = 'hlsjs-init-failed';
             setPlayerState('failed');
             setPlayerStatus(translateRef.current('player.status.unavailable'));
             setMessage(translateRef.current('player.message.loadFailed'));
@@ -190,11 +204,12 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     }
     return () => {
       cancelled = true;
-      if (loadedMetadataHandler) video.removeEventListener('loadedmetadata', loadedMetadataHandler);
+      sourceSetupActiveRef.current = false;
+      if (mediaReadyHandler) video.removeEventListener('canplay', mediaReadyHandler);
       hlsRef.current?.destroy();
       hlsRef.current = undefined;
     };
-  }, [camera.liveUrl, camera.status, camera.streamEpoch]);
+  }, [camera.cameraId, camera.liveUrl, camera.status, camera.streamEpoch]);
 
   useEffect(
     () => () => {
@@ -269,9 +284,16 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
       try {
         wasPlayingRef.current = true;
         await video.play();
-      } catch {
+      } catch (failure) {
         wasPlayingRef.current = false;
-        setMessage(t('player.message.playFailed'));
+        const reason = failure instanceof DOMException ? failure.name : '';
+        setMessage(
+          reason === 'NotAllowedError'
+            ? t('player.message.autoplayBlocked')
+            : reason === 'NotSupportedError'
+              ? t('player.message.unsupported')
+              : t('player.message.playFailed'),
+        );
       }
     }
   }
@@ -290,6 +312,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const warning = availability(camera.status, t);
   const range = videoRef.current ? seekRange(videoRef.current) : undefined;
   const canControl = camera.status === 'capturing' && playerState !== 'failed';
+  const canStartPlayback = canControl && mediaReady;
 
   return (
     <section className="panel-card live-panel mb-3" aria-labelledby="live-title">
@@ -309,7 +332,6 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
           <video
             ref={videoRef}
             className="live-video"
-            autoPlay
             muted={muted}
             playsInline
             preload="none"
@@ -371,7 +393,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
             className="btn-player"
             type="button"
             onClick={() => void togglePlayback()}
-            disabled={!canControl}
+            disabled={!canStartPlayback}
             aria-label={playing ? t('player.button.pause') : t('player.button.play')}
           >
             {playing ? t('player.button.pauseShort') : t('player.button.playShort')}

@@ -17,9 +17,29 @@ describe('UI motion accessibility contract', () => {
     expect(stylesheet).toContain('@media (hover: hover) and (prefers-reduced-motion: no-preference)');
   });
 
+  it('adds theme-driven ambient lighting and neon accents without a runtime dependency', () => {
+    expect(stylesheet).toContain('body::before');
+    expect(stylesheet).toContain('ellipse 42rem 34rem at 8% 6%');
+    expect(stylesheet).toContain('animation: ambient-drift 28s ease-in-out');
+    expect(stylesheet).toContain('animation: brand-glow 7s ease-in-out');
+    expect(stylesheet).toContain('0 0 34px color-mix(in srgb, var(--accent) 12%, transparent)');
+  });
+
+  it('keeps long dynamic labels inside cards, badges, buttons, and narrow layouts', () => {
+    expect(stylesheet).toContain('.panel-card :is(h1, h2, h3, h4, h5, h6, p, span, strong, small, label)');
+    expect(stylesheet).toContain('overflow-wrap: anywhere');
+    expect(stylesheet).toContain('.health-pill');
+    expect(stylesheet).toContain('grid-template-columns: 1.25rem minmax(0, 1fr) minmax(0, 135px)');
+    expect(stylesheet).toContain('grid-template-columns: 1rem minmax(0, 1fr) minmax(0, 112px)');
+    expect(stylesheet).toContain('.header-actions {\n    width: 100%;\n    flex-wrap: wrap;');
+  });
+
   it('reduces animation and transition duration when requested by the OS', () => {
     expect(stylesheet).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-duration: 0\.01ms/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?body::before,[\s\S]*?\.brand-mark\s*\{\s*animation: none;/,
     );
     expect(stylesheet).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition-duration: 0\.01ms/,

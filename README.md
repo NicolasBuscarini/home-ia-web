@@ -30,9 +30,15 @@ Temas disponíveis: Bosque (padrão), Grafite, Oceano, Claro, Lavanda, Pôr do s
 
 No monitoramento autenticado, o vídeo ao vivo inicia automaticamente sem áudio; o usuário pode ativar o som nos controles. O player usa HLS nativo quando declarado pelo navegador e recorre ao HLS.js quando necessário; os buffers limitados se aplicam ao caminho HLS.js (meta 12 s, máximo 18 s, 6 s anteriores e limite de 48 MB). Isso não é um histórico de 15 minutos. A identidade efêmera de presença fica em `sessionStorage` para manter a mesma aba ao recarregar, sem cookie/localStorage nem persistência no servidor.
 
+O painel trata câmeras como coleção: com uma câmera, apresenta o estado diretamente; com várias, permite escolher qual monitorar por teclado ou toque. Somente a câmera selecionada abre o player, evitando streams de vídeo concorrentes no browser. Isso prepara a interface, mas não ativa captura multicâmera: a API e a operação continuam limitadas ao perfil ativo, e a expansão exige catálogo/autorização e benchmark próprios.
+
+Administrators têm a aba **Usuários** com lista paginada e detalhes expansíveis, seleção de papéis, concessão/revogação de câmeras habilitadas e desativação confirmada. A API omite e-mails; desativar preserva conta/auditoria, revoga concessões e sessões. Os endpoints revalidam o papel e Origin no servidor. A aba não aparece para Viewer/User; a landing `User` não consulta catálogo, readiness ou mídia.
+
 Idiomas disponíveis: Português (Brasil) e English (US). A seleção fica salva no browser; na primeira visita, o idioma do navegador escolhe inglês quando compatível e, nos demais casos, usa pt-BR. Componentes obtêm `t()` e o idioma por `useI18n()`; novas mensagens são adicionadas uma única vez por locale ao catálogo tipado em `src/i18n/messages.ts`, com interpolação de valores, sem ramificações de interface duplicadas.
 
 Execute as verificações a partir do repositório de contexto com `./garage verify-web`; ele encaminha ao Compose fixado do projeto web.
+
+O ensaio browser automatizado parcial de CT02 roda com `./garage test-ct02-web`: por padrão, usa Chromium headless em desktop e viewport mobile emulado, autentica pela UI, confirma negação anônima de catálogo/playlist e observa playback decodificado por 10 min. Credenciais vêm de `CT02_USERNAME`/`CT02_PASSWORD` no ambiente ou `AUTH_USERNAME`/`AUTH_PASSWORD` no `.env` raiz; nunca são impressas. `CT02_BASE_URL` e `CT02_DURATION_SECONDS` podem ajustar destino e duração. Não reinicia serviços. Mobile emulado não é celular físico, e sem timestamp de origem validado o teste não mede latência fonte→tela nem p95; portanto não conclui CT02.
 
 ## Limites
 

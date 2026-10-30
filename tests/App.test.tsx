@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -116,6 +116,52 @@ describe('application shell', () => {
     await signIn(2);
 
     expect(clientIds[1]).toBe(firstTabId);
+  });
+
+  it('renders the authorized camera collection and lets the operator choose one live view', async () => {
+    let authenticated = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === '/api/v1/auth/session') return json({ authenticated });
+      if (path === '/api/v1/auth/login') {
+        authenticated = true;
+        return new Response(null, { status: 204 });
+      }
+      if (path === '/api/v1/auth/me') return json({ username: 'admin', role: 'Administrator' });
+      if (path === '/api/v1/cameras')
+        return json([
+          {
+            cameraId: 'garage-01',
+            status: 'capturing',
+            streamEpoch: 'epoch-1',
+            liveUrl: '/api/v1/live/garage-01/index.m3u8',
+          },
+          {
+            cameraId: 'side-entry',
+            status: 'reconnecting',
+            streamEpoch: 'epoch-2',
+            liveUrl: '/api/v1/live/side-entry/index.m3u8',
+          },
+        ]);
+      if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    await user.type(screen.getByLabelText('Usuário'), 'admin');
+    await user.type(screen.getByLabelText('Senha'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    const first = await screen.findByRole('button', { name: /garage-01/ });
+    const second = screen.getByRole('button', { name: /side-entry/ });
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'false');
+    expect(within(second).getByRole('status')).toHaveTextContent('Reconectando');
+    await user.click(second);
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(first).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getAllByLabelText('Vídeo ao vivo da câmera')).toHaveLength(1);
   });
 
   it('shows retry feedback when the initial same-origin session call fails', async () => {

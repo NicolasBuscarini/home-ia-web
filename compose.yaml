@@ -15,5 +15,20 @@ services:
       - no-new-privileges:true
     command: sh -lc 'npm ci && npm run verify'
 
+  ct02:
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
+    profiles: [ct02]
+    network_mode: host
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      CI: "true"
+      CT02_BASE_URL: ${CT02_BASE_URL:-http://127.0.0.1:5173}
+      CT02_USERNAME: ${CT02_USERNAME:-}
+      CT02_PASSWORD: ${CT02_PASSWORD:-}
+      CT02_DURATION_SECONDS: ${CT02_DURATION_SECONDS:-600}
+    command: sh -lc 'npm ci && npm run test:ct02'
+
 volumes:
   web_node_modules:

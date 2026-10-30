@@ -3,19 +3,23 @@ import { type DashboardTab, DashboardTabs } from '../../components/DashboardTabs
 import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus, UserRole } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
+import { AdminUsersPanel } from '../admin/AdminUsersPanel';
 import { OperationsPanel } from '../operations/OperationsPanel';
 import { LivePlayer } from './LivePlayer';
 
 interface DashboardProps {
-  camera: CameraStatus;
+  cameras: CameraStatus[];
+  selectedCameraId?: string;
+  onCameraSelect: (cameraId: string) => void;
   userRole: UserRole;
 }
 
-export function Dashboard({ camera, userRole }: DashboardProps) {
+export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole }: DashboardProps) {
   const { t } = useI18n();
   const [active, setActive] = useState<DashboardTab>('monitor');
   const [playerStatus, setPlayerStatus] = useState('Player ainda não iniciado');
   const isAdmin = userRole === 'Administrator';
+  const camera = cameras.find((item) => item.cameraId === selectedCameraId);
   const states = {
     capturing: ['capture.state.capturing', 'healthy'],
     connecting: ['capture.state.connecting', 'pending'],
@@ -24,31 +28,82 @@ export function Dashboard({ camera, userRole }: DashboardProps) {
     'spool-unavailable': ['capture.state.spoolUnavailable', 'failed'],
     stopped: ['capture.state.stopped', 'failed'],
   } as const;
-  const item = states[camera.status as keyof typeof states];
-  const status = { text: t(item?.[0] ?? 'capture.state.unknown'), state: item?.[1] ?? 'pending' };
   return (
     <section aria-label={t('dashboard.aria.garageState')}>
       <DashboardTabs active={active} isAdmin={isAdmin} onChange={setActive} />
       <div id="view-monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden={active !== 'monitor'}>
-        <section className="panel-card camera-summary mb-3" aria-label={t('dashboard.aria.cameraState')}>
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-              <p className="eyebrow mb-1">{t('header.cameraActive')}</p>
-              <h2 className="h5 mb-0">{camera.cameraId}</h2>
-            </div>
-            <StatusBadge label={status.text} state={status.state} live />
-          </div>
-          <p className="small text-secondary mb-0 mt-3">{t('header.cameraStatusNote')}</p>
-        </section>
-        <LivePlayer camera={camera} onStatusChange={setPlayerStatus} />
+        {cameras.length > 0 ? (
+          <>
+            <section className="camera-collection mb-3" aria-label={t('dashboard.cameras.title')}>
+              {cameras.length > 1 && (
+                <div className="camera-collection-heading">
+                  <h2 className="h5 mb-0">{t('dashboard.cameras.title')}</h2>
+                  <p className="small text-secondary mb-0">{t('dashboard.cameras.hint')}</p>
+                </div>
+              )}
+              <ul className="camera-card-list">
+                {cameras.map((item) => {
+                  const itemStatus = states[item.status as keyof typeof states];
+                  const badge = {
+                    text: t(itemStatus?.[0] ?? 'capture.state.unknown'),
+                    state: itemStatus?.[1] ?? 'pending',
+                  };
+                  const selected = item.cameraId === selectedCameraId;
+                  const content = (
+                    <>
+                      <span className="camera-card-copy">
+                        <span className="eyebrow mb-1">
+                          {selected ? t('dashboard.cameras.selected') : t('dashboard.cameras.camera')}
+                        </span>
+                        <strong>{item.cameraId}</strong>
+                      </span>
+                      <StatusBadge label={badge.text} state={badge.state} />
+                    </>
+                  );
+                  return (
+                    <li className="camera-card-wrap" key={item.cameraId}>
+                      {cameras.length > 1 ? (
+                        <button
+                          className={`camera-card${selected ? ' is-selected' : ''}`}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => onCameraSelect(item.cameraId)}
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        <article className="camera-card is-selected">{content}</article>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {cameras.length === 1 && (
+                <p className="small text-secondary mb-0 mt-2">{t('header.cameraStatusNote')}</p>
+              )}
+            </section>
+            {camera && <LivePlayer camera={camera} onStatusChange={setPlayerStatus} />}
+          </>
+        ) : (
+          <section className="panel-card feedback-panel" role="status" aria-live="polite">
+            <span className="eyebrow">{t('dashboard.cameras.emptyEyebrow')}</span>
+            <h2 className="h5 mt-2">{t('dashboard.cameras.emptyTitle')}</h2>
+            <p className="small text-secondary mb-0">{t('dashboard.cameras.emptyMessage')}</p>
+          </section>
+        )}
       </div>
-      {isAdmin && active !== 'monitor' && (
+      {isAdmin && camera && active !== 'monitor' && active !== 'users' && (
         <section id={`view-${active}`} role="tabpanel" aria-labelledby={`tab-${active}`}>
           <OperationsPanel camera={camera} view={active} playerStatus={playerStatus} />
         </section>
       )}
+      {isAdmin && active === 'users' && (
+        <section id="view-users" role="tabpanel" aria-labelledby="tab-users">
+          <AdminUsersPanel />
+        </section>
+      )}
       {isAdmin &&
-        (['health', 'dependencies', 'capture'] as const)
+        (['health', 'dependencies', 'capture', 'users'] as const)
           .filter((tab) => tab !== active)
           .map((tab) => (
             <section key={tab} id={`view-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} hidden />
