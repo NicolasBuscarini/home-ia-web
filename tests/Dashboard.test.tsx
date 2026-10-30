@@ -32,37 +32,57 @@ function renderDashboard(
 }
 
 describe('dashboard navigation', () => {
-  it('exposes only monitor view to Viewer and switches panels using keyboard', () => {
+  it('exposes only monitoring to Viewer', () => {
     renderDashboard('Viewer');
-    const tabs = screen.getByRole('tablist', { name: 'Telas do painel' });
-    expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
-    expect(screen.getByRole('tabpanel', { name: 'Monitoramento' })).toBeInTheDocument();
+    const menu = screen.getByRole('navigation', { name: 'Navegação principal' });
+    expect(within(menu).getAllByRole('button')).toHaveLength(1);
+    expect(within(menu).getByRole('button', { name: 'Monitoramento' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('region', { name: 'Monitoramento' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reproduzir vídeo' })).toBeDisabled();
   });
 
-  it('shows operational tabs only for Administrator and maintains tab selection', () => {
+  it('groups system views under Sistema and management screens under Gestão', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === '/api/v1/admin/access-rules') return new Response('[]', { status: 200 });
+      if (path === '/api/v1/admin/permission-catalog') return new Response('[]', { status: 200 });
+      if (path.startsWith('/api/v1/admin/users?page='))
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 25, totalCount: 0 }), {
+          status: 200,
+        });
+      if (path === '/api/v1/admin/cameras?page=1&pageSize=100')
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      throw new Error(`Unexpected request: ${path}`);
+    });
     renderDashboard('Administrator');
-    const tabs = screen.getByRole('tablist', { name: 'Telas do painel' });
-    expect(within(tabs).getAllByRole('tab')).toHaveLength(5);
-    for (const tab of within(tabs).getAllByRole('tab')) {
-      expect(document.getElementById(tab.getAttribute('aria-controls') ?? '')).toBeInTheDocument();
-    }
-    const healthTab = screen.getByRole('tab', { name: 'Saúde do sistema' });
-    healthTab.focus();
-    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
-    expect(healthTab).toHaveAttribute('aria-selected', 'true');
-    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
-    const dependenciesTab = screen.getByRole('tab', { name: 'Dependências' });
-    expect(dependenciesTab).toHaveFocus();
-    expect(dependenciesTab).toHaveAttribute('aria-selected', 'true');
-    fireEvent.keyDown(tabs, { key: 'End' });
-    const usersTab = screen.getByRole('tab', { name: 'Usuários' });
-    expect(usersTab).toHaveFocus();
-    expect(usersTab).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tabpanel', { name: 'Usuários' })).toBeInTheDocument();
-    fireEvent.click(healthTab);
-    expect(healthTab).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tabpanel', { name: 'Saúde do sistema' })).toBeInTheDocument();
+    const menu = screen.getByRole('navigation', { name: 'Navegação principal' });
+    expect(within(menu).getAllByRole('button')).toHaveLength(3);
+    const system = within(menu).getByRole('button', { name: 'Sistema' });
+    await userEvent.setup().click(system);
+    expect(system).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(system).toHaveAttribute('aria-expanded', 'false');
+    expect(system).toHaveFocus();
+    await userEvent.setup().click(system);
+    const healthMenuItem = within(menu).getByRole('button', { name: 'Saúde do sistema' });
+    await userEvent.setup().click(healthMenuItem);
+    expect(screen.getByRole('region', { name: 'Saúde do sistema' })).toBeInTheDocument();
+
+    const management = within(menu).getByRole('button', { name: 'Gestão' });
+    await userEvent.setup().click(management);
+    expect(within(menu).getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
+    expect(within(menu).getByRole('button', { name: 'Perfis e permissões' })).toBeInTheDocument();
+    await userEvent.setup().click(within(menu).getByRole('button', { name: 'Usuários' }));
+    expect(await screen.findByRole('heading', { name: 'Gestão de usuários' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Perfis e permissões' })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(management);
+    await userEvent.setup().click(within(menu).getByRole('button', { name: 'Perfis e permissões' }));
+    expect(await screen.findByRole('heading', { name: 'Perfis e permissões' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Gestão de usuários' })).not.toBeInTheDocument();
   });
 
   it('presents one camera without adding a redundant selector', () => {

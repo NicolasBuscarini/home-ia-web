@@ -3,6 +3,7 @@ export type UserRole = 'Administrator' | 'Viewer' | 'User';
 export interface AuthenticatedUser {
   username: string;
   role: UserRole;
+  canMonitor: boolean;
 }
 
 export interface CameraStatus {

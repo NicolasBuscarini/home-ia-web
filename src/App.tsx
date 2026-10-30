@@ -19,6 +19,8 @@ function AppContent() {
   const { t } = useI18n();
   const [screen, setScreen] = useState<ScreenState>('loading');
   const [role, setRole] = useState<UserRole>();
+  const [canMonitor, setCanMonitor] = useState(false);
+  const [username, setUsername] = useState<string>();
   const [cameras, setCameras] = useState<CameraStatus[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>();
   const [error, setError] = useState('');
@@ -35,8 +37,10 @@ function AppContent() {
     const user = await getJson<AuthenticatedUser>('/api/v1/auth/me');
     if (!validateRole(user.role)) throw new Error('Papel de acesso não reconhecido.');
     setRole(user.role);
+    setCanMonitor(user.role === 'Administrator' || user.canMonitor);
+    setUsername(user.username);
     setError('');
-    if (user.role === 'User') {
+    if (user.role !== 'Administrator' && !user.canMonitor) {
       setCameras([]);
       setSelectedCameraId(undefined);
       setScreen('authenticated');
@@ -56,6 +60,8 @@ function AppContent() {
     const session = await getJson<{ authenticated: boolean }>('/api/v1/auth/session');
     if (!session.authenticated) {
       setRole(undefined);
+      setCanMonitor(false);
+      setUsername(undefined);
       setCameras([]);
       setSelectedCameraId(undefined);
       setClientCount(undefined);
@@ -79,7 +85,7 @@ function AppContent() {
   }, [checkSession, t]);
 
   useEffect(() => {
-    if (screen !== 'authenticated' || !role || role === 'User') return;
+    if (screen !== 'authenticated' || !role || !canMonitor) return;
     let active = true;
     const poll = async () => {
       if (pollInFlight.current) return;
@@ -91,6 +97,8 @@ function AppContent() {
         if (!session.authenticated) {
           setScreen('anonymous');
           setRole(undefined);
+          setCanMonitor(false);
+          setUsername(undefined);
           setCameras([]);
           setSelectedCameraId(undefined);
           setClientCount(undefined);
@@ -123,6 +131,8 @@ function AppContent() {
           if (failure instanceof ApiError && failure.status === 401) {
             setScreen('anonymous');
             setRole(undefined);
+            setCanMonitor(false);
+            setUsername(undefined);
             setCameras([]);
             setSelectedCameraId(undefined);
             setClientCount(undefined);
@@ -138,10 +148,10 @@ function AppContent() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [screen, role, t]);
+  }, [screen, role, canMonitor, t]);
 
   useEffect(() => {
-    if (screen !== 'authenticated' || !role || role === 'User') return;
+    if (screen !== 'authenticated' || !role || !canMonitor) return;
     const id = getOrCreateClientId();
     if (!id) {
       setClientCount('—');
@@ -183,7 +193,7 @@ function AppContent() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [screen, role]);
+  }, [screen, role, canMonitor]);
 
   async function logout() {
     setLogoutBusy(true);
@@ -193,6 +203,8 @@ function AppContent() {
       /* Cookie may already be expired. */
     }
     setRole(undefined);
+    setCanMonitor(false);
+    setUsername(undefined);
     setCameras([]);
     setSelectedCameraId(undefined);
     setClientCount(undefined);
@@ -216,7 +228,8 @@ function AppContent() {
     <main className="container app-shell py-4 py-md-5">
       <AppHeader
         role={screen === 'authenticated' ? role : undefined}
-        activeClients={screen === 'authenticated' && role !== 'User' ? clientCount : undefined}
+        username={screen === 'authenticated' ? username : undefined}
+        activeClients={screen === 'authenticated' && canMonitor ? clientCount : undefined}
         theme={theme}
         onThemeChange={setTheme}
         onLogout={() => void logout()}
@@ -229,8 +242,8 @@ function AppContent() {
         </section>
       )}
       {screen === 'anonymous' && <AuthenticationPanel onAuthenticated={handleAuthenticated} />}
-      {screen === 'authenticated' && role === 'User' && <UserLanding />}
-      {screen === 'authenticated' && role && role !== 'User' && (
+      {screen === 'authenticated' && role && !canMonitor && <UserLanding />}
+      {screen === 'authenticated' && role && canMonitor && (
         <Dashboard
           cameras={cameras}
           selectedCameraId={selectedCamera?.cameraId}

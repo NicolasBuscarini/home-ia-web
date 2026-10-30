@@ -4,7 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminUsersPanel } from '../src/features/admin/AdminUsersPanel';
 import { I18nProvider } from '../src/i18n/i18n';
 
-const viewer = { id: 'viewer-id', userName: 'new-viewer', isActive: true };
+const account = { id: 'user-1', userName: 'local-user', isActive: true };
+const profile = {
+  id: 'profile-1',
+  currentVersionId: 'profile-version-1',
+  name: 'Garage operator',
+  isActive: true,
+  version: 1,
+  updatedAtUtc: '2026-10-30T00:00:00Z',
+  permissionKeys: ['live.video.view'],
+};
 const camera = { cameraId: 'garage-01', contextId: 'garage', name: 'Garagem', isEnabled: true };
 
 function response(body: unknown, status = 200) {
@@ -20,57 +29,32 @@ afterEach(() => {
 });
 
 describe('administrative user management', () => {
-  it('loads account details, changes roles and grants, revokes, and confirms deactivation', async () => {
-    let viewerActive = true;
-    let currentRoles = ['User'];
-    let hasGrant = false;
+  it('assigns only an existing profile with explicit camera scope', async () => {
+    let savedAssignments: Array<Record<string, unknown>> = [];
     const requests: Array<{ path: string; method: string; body?: string }> = [];
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input);
       const method = init?.method ?? 'GET';
-      requests.push({ path, method, body: init?.body ? String(init.body) : undefined });
-      if (path.startsWith('/api/v1/admin/users?page=')) {
-        return response({
-          items: [{ ...viewer, isActive: viewerActive }],
-          page: 1,
-          pageSize: 25,
-          totalCount: 1,
-        });
-      }
+      const body = init?.body ? String(init.body) : undefined;
+      requests.push({ path, method, body });
+      if (path.startsWith('/api/v1/admin/users?page='))
+        return response({ items: [account], page: 1, pageSize: 25, totalCount: 1 });
       if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [camera] });
-      if (path === '/api/v1/admin/users/viewer-id' && method === 'GET') {
-        return response({
-          ...viewer,
-          isActive: viewerActive,
-          roles: currentRoles,
-          cameraGrants: hasGrant
-            ? [
-                {
-                  contextId: 'garage',
-                  cameraId: 'garage-01',
-                  cameraName: 'Garagem',
-                  grantedAtUtc: '2026-10-30T00:00:00Z',
-                  revokedAtUtc: null,
-                },
-              ]
-            : [],
-        });
-      }
-      if (method === 'PUT' && path.endsWith('/roles')) {
-        currentRoles = JSON.parse(String(init?.body)).roles;
-        return response(undefined, 204);
-      }
-      if (method === 'PUT' && path.endsWith('/cameras/garage-01')) {
-        hasGrant = true;
-        return response(undefined, 204);
-      }
-      if (method === 'DELETE' && path.endsWith('/cameras/garage-01')) {
-        hasGrant = false;
-        return response(undefined, 204);
-      }
-      if (method === 'DELETE' && path === '/api/v1/admin/users/viewer-id') {
-        viewerActive = false;
+      if (path === '/api/v1/admin/access-rules') return response([profile]);
+      if (path === '/api/v1/admin/users/user-1' && method === 'GET')
+        return response({ ...account, isAdministrator: false, accessProfiles: savedAssignments });
+      if (path === '/api/v1/admin/users/user-1/access-rules' && method === 'PUT') {
+        savedAssignments = [
+          {
+            assignmentId: 'assignment-1',
+            profileId: 'profile-1',
+            profileVersionId: 'profile-version-1',
+            profileName: 'Garage operator',
+            profileVersion: 1,
+            scopes: [{ contextId: 'garage', cameraId: 'garage-01' }],
+            assignedAtUtc: '2026-10-30T00:00:00Z',
+          },
+        ];
         return response(undefined, 204);
       }
       throw new Error(`Unexpected request: ${method} ${path}`);
@@ -83,39 +67,42 @@ describe('administrative user management', () => {
       </I18nProvider>,
     );
     expect(await screen.findByRole('heading', { name: 'Gestão de usuários' })).toBeInTheDocument();
+    expect(screen.queryByText('Editor de perfil')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Detalhes' }));
-    expect(await screen.findByRole('group', { name: 'Papéis' })).toBeInTheDocument();
+    await screen.findByRole('group', { name: 'Perfis atribuídos e escopo de câmera' });
+    await user.click(screen.getByRole('checkbox', { name: 'Garage operator · v1' }));
+    await user.click(screen.getByRole('checkbox', { name: /Garagem \(garage · garage-01\)/ }));
+    await user.click(screen.getByRole('button', { name: 'Salvar atribuições de perfil' }));
 
-    await user.click(screen.getByRole('checkbox', { name: 'Visualizador' }));
-    await user.click(screen.getByRole('button', { name: 'Salvar papéis' }));
-    expect(await screen.findByText('Papéis atualizados e sessões existentes revogadas.')).toBeInTheDocument();
-    expect(requests).toContainEqual({
-      path: '/api/v1/admin/users/viewer-id/roles',
-      method: 'PUT',
-      body: JSON.stringify({ roles: ['User', 'Viewer'] }),
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Conceder acesso' }));
-    expect(await screen.findByRole('button', { name: 'Revogar acesso' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Revogar acesso' }));
-    expect(
-      await screen.findByText('Acesso à câmera revogado e sessões existentes invalidadas.'),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Desativar conta' }));
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Desativar a conta “new-viewer”? As sessões existentes serão revogadas.',
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        path: '/api/v1/admin/users/user-1/access-rules',
+        method: 'PUT',
+        body: JSON.stringify({
+          assignments: [
+            {
+              profileVersionId: 'profile-version-1',
+              scopes: [{ contextId: 'garage', cameraId: 'garage-01' }],
+            },
+          ],
+        }),
+      }),
     );
-    await waitFor(() => expect(screen.getByText('Desativada')).toBeInTheDocument());
+    const assignmentRequest = requests.find(
+      (item) => item.path.endsWith('/access-rules') && item.method === 'PUT',
+    );
+    expect(assignmentRequest?.body).not.toContain('permissionKeys');
     expect(
-      requests.some(
-        (request) => request.method === 'DELETE' && request.path === '/api/v1/admin/users/viewer-id',
-      ),
-    ).toBe(true);
+      await screen.findByText('Perfis de acesso salvos e sessões existentes revogadas.'),
+    ).toBeInTheDocument();
   });
 
-  it('shows a retryable load error without exposing exception detail', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('private-error-detail'));
+  it('shows retryable sanitized load errors and does not call permission catalog or profile mutation', async () => {
+    const requests: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requests.push(String(input));
+      throw new Error('private-error-detail');
+    });
     render(
       <I18nProvider>
         <AdminUsersPanel />
@@ -126,34 +113,29 @@ describe('administrative user management', () => {
     );
     expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
     expect(screen.queryByText('private-error-detail')).not.toBeInTheDocument();
+    expect(requests.some((path) => path.endsWith('/permission-catalog'))).toBe(false);
+    expect(requests.some((path) => path.endsWith('/access-rules') && !path.includes('?'))).toBe(true);
   });
 
-  it('leaves account state untouched when deactivation confirmation is cancelled', async () => {
-    const requests: Array<{ path: string; method: string }> = [];
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+  it('keeps the account list visible when a camera-scope catalog is unavailable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input);
-      const method = init?.method ?? 'GET';
-      requests.push({ path, method });
       if (path.startsWith('/api/v1/admin/users?page='))
-        return response({ items: [viewer], page: 1, pageSize: 25, totalCount: 1 });
-      if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [] });
-      if (path === '/api/v1/admin/users/viewer-id')
-        return response({ ...viewer, roles: ['User'], cameraGrants: [] });
-      throw new Error(`Unexpected request: ${method} ${path}`);
+        return response({ items: [account], page: 1, pageSize: 25, totalCount: 1 });
+      if (path === '/api/v1/admin/cameras?page=1&pageSize=100')
+        return response({ error: 'unavailable' }, 503);
+      if (path === '/api/v1/admin/access-rules') return response([profile]);
+      throw new Error(`Unexpected request: ${path}`);
     });
 
-    const user = userEvent.setup();
     render(
       <I18nProvider>
         <AdminUsersPanel />
       </I18nProvider>,
     );
-    await screen.findByRole('heading', { name: 'Gestão de usuários' });
-    await user.click(screen.getByRole('button', { name: 'Detalhes' }));
-    await user.click(await screen.findByRole('button', { name: 'Desativar conta' }));
-
-    expect(requests.some((request) => request.method === 'DELETE')).toBe(false);
-    expect(screen.getByText('Ativa')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'local-user' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'As contas carregaram, mas não foi possível carregar perfis ou escopos de câmera.',
+    );
   });
 });

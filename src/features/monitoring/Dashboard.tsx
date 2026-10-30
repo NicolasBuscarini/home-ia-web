@@ -1,11 +1,19 @@
-import { useState } from 'react';
-import { type DashboardTab, DashboardTabs } from '../../components/DashboardTabs';
+import { useEffect, useRef, useState } from 'react';
+import { DashboardMenu, type DashboardView } from '../../components/DashboardMenu';
 import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus, UserRole } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
+import type { TranslationKey } from '../../i18n/messages';
+import { AdminProfilesPanel } from '../admin/AdminProfilesPanel';
 import { AdminUsersPanel } from '../admin/AdminUsersPanel';
 import { OperationsPanel } from '../operations/OperationsPanel';
 import { LivePlayer } from './LivePlayer';
+
+const systemViewLabels: Partial<Record<DashboardView, TranslationKey>> = {
+  health: 'dashboard.menu.health',
+  dependencies: 'dashboard.menu.dependencies',
+  capture: 'dashboard.menu.capture',
+};
 
 interface DashboardProps {
   cameras: CameraStatus[];
@@ -16,10 +24,26 @@ interface DashboardProps {
 
 export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole }: DashboardProps) {
   const { t } = useI18n();
-  const [active, setActive] = useState<DashboardTab>('monitor');
+  const [active, setActive] = useState<DashboardView>('monitor');
   const [playerStatus, setPlayerStatus] = useState('Player ainda não iniciado');
+  const playerAnchorRef = useRef<HTMLDivElement>(null);
+  const didAutoScrollRef = useRef(false);
   const isAdmin = userRole === 'Administrator';
   const camera = cameras.find((item) => item.cameraId === selectedCameraId);
+  useEffect(() => {
+    if (didAutoScrollRef.current || active !== 'monitor' || !camera) return;
+    const frame = window.requestAnimationFrame(() => {
+      const anchor = playerAnchorRef.current;
+      if (!anchor) return;
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      anchor.scrollIntoView?.({
+        block: 'start',
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      });
+      didAutoScrollRef.current = true;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, camera]);
   const states = {
     capturing: ['capture.state.capturing', 'healthy'],
     connecting: ['capture.state.connecting', 'pending'],
@@ -30,8 +54,8 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
   } as const;
   return (
     <section aria-label={t('dashboard.aria.garageState')}>
-      <DashboardTabs active={active} isAdmin={isAdmin} onChange={setActive} />
-      <div id="view-monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden={active !== 'monitor'}>
+      <DashboardMenu active={active} isAdmin={isAdmin} onChange={setActive} />
+      <section id="view-monitor" aria-labelledby="tab-monitor" hidden={active !== 'monitor'}>
         {cameras.length > 0 ? (
           <>
             <section className="camera-collection mb-3" aria-label={t('dashboard.cameras.title')}>
@@ -82,7 +106,11 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
                 <p className="small text-secondary mb-0 mt-2">{t('header.cameraStatusNote')}</p>
               )}
             </section>
-            {camera && <LivePlayer camera={camera} onStatusChange={setPlayerStatus} />}
+            {camera && (
+              <div className="monitor-player-anchor" ref={playerAnchorRef}>
+                <LivePlayer camera={camera} onStatusChange={setPlayerStatus} />
+              </div>
+            )}
           </>
         ) : (
           <section className="panel-card feedback-panel" role="status" aria-live="polite">
@@ -91,23 +119,22 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
             <p className="small text-secondary mb-0">{t('dashboard.cameras.emptyMessage')}</p>
           </section>
         )}
-      </div>
-      {isAdmin && camera && active !== 'monitor' && active !== 'users' && (
-        <section id={`view-${active}`} role="tabpanel" aria-labelledby={`tab-${active}`}>
+      </section>
+      {isAdmin && camera && (active === 'health' || active === 'dependencies' || active === 'capture') && (
+        <section id={`view-${active}`} aria-label={t(systemViewLabels[active] ?? 'dashboard.menu.system')}>
           <OperationsPanel camera={camera} view={active} playerStatus={playerStatus} />
         </section>
       )}
       {isAdmin && active === 'users' && (
-        <section id="view-users" role="tabpanel" aria-labelledby="tab-users">
+        <section id="view-users" aria-label={t('dashboard.menu.users')}>
           <AdminUsersPanel />
         </section>
       )}
-      {isAdmin &&
-        (['health', 'dependencies', 'capture', 'users'] as const)
-          .filter((tab) => tab !== active)
-          .map((tab) => (
-            <section key={tab} id={`view-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} hidden />
-          ))}
+      {isAdmin && active === 'profiles' && (
+        <section id="view-profiles" aria-label={t('dashboard.menu.profiles')}>
+          <AdminProfilesPanel />
+        </section>
+      )}
     </section>
   );
 }

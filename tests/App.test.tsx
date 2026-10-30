@@ -1,7 +1,9 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
+
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -9,6 +11,11 @@ function json(body: unknown, status = 200) {
 
 afterEach(() => {
   cleanup();
+  if (originalScrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  }
   vi.restoreAllMocks();
 });
 
@@ -36,7 +43,10 @@ describe('application shell', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole('heading', { name: 'Entre no painel' });
+    expect(screen.getByRole('heading', { name: 'Monitoramento', level: 1 })).toBeInTheDocument();
     await user.click(screen.getByText('Bosque', { selector: 'strong' }));
+    expect(document.querySelector('.theme-selector')).toHaveAttribute('open');
+    expect(screen.getByText('Bosque', { selector: 'strong' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: /^Usar o tema/ })).toHaveLength(8);
     await user.click(screen.getByRole('button', { name: 'Usar o tema Lavanda' }));
     expect(document.documentElement).toHaveAttribute('data-theme', 'lavender');
@@ -50,6 +60,7 @@ describe('application shell', () => {
     expect(await screen.findByRole('heading', { name: 'Entre no painel' })).toBeInTheDocument();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Idioma' }), 'en-US');
     expect(await screen.findByRole('heading', { name: 'Sign in to the dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Monitoring', level: 1 })).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
     expect(localStorage.getItem('garage-watch.locale.v1')).toBe('en-US');
     expect(document.documentElement).toHaveAttribute('lang', 'en-US');
@@ -72,6 +83,8 @@ describe('application shell', () => {
     await user.type(screen.getByLabelText('Senha'), '123456');
     await user.click(screen.getByRole('button', { name: 'Entrar' }));
     expect(await screen.findByRole('heading', { name: 'Conta ativa' })).toBeInTheDocument();
+    expect(await screen.findByText('local-user', { selector: '.user-identity-name' })).toBeInTheDocument();
+    expect(screen.getByText('Usuário', { selector: '.user-identity-role' })).toBeInTheDocument();
     expect(calls).not.toContain('/api/v1/cameras');
     expect(calls).not.toContain('/health/ready');
     expect(calls).not.toContain('/api/v1/clients/presence');
@@ -119,6 +132,11 @@ describe('application shell', () => {
   });
 
   it('renders the authorized camera collection and lets the operator choose one live view', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
     let authenticated = false;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input);
@@ -153,12 +171,26 @@ describe('application shell', () => {
     await user.type(screen.getByLabelText('Senha'), '123456');
     await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
+    expect(await screen.findByText('admin', { selector: '.user-identity-name' })).toBeInTheDocument();
+    expect(screen.getByText('Administrador', { selector: '.user-identity-role' })).toBeInTheDocument();
+    expect(screen.getByText('AD', { selector: '.user-avatar' })).toHaveAttribute('aria-hidden', 'true');
+
+    const clientIndicator = await screen.findByRole('status', { name: '1 cliente conectado' });
+    expect(clientIndicator.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(clientIndicator.querySelector('.client-count-value')).toHaveTextContent('1');
+    expect(clientIndicator).not.toHaveTextContent('cliente conectado');
+
     const first = await screen.findByRole('button', { name: /garage-01/ });
     const second = screen.getByRole('button', { name: /side-entry/ });
+    await screen.findByLabelText('Vídeo ao vivo da câmera');
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
     expect(first).toHaveAttribute('aria-pressed', 'true');
     expect(second).toHaveAttribute('aria-pressed', 'false');
     expect(within(second).getByRole('status')).toHaveTextContent('Reconectando');
     await user.click(second);
+    await waitFor(() => expect(second).toHaveAttribute('aria-pressed', 'true'));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(second).toHaveAttribute('aria-pressed', 'true');
     expect(first).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getAllByLabelText('Vídeo ao vivo da câmera')).toHaveLength(1);
