@@ -59,12 +59,17 @@ function errorKind(error: unknown, fallback: ErrorKind): ErrorKind {
   return fallback;
 }
 
-export function AdminUsersPanel() {
+interface AdminUsersPanelProps {
+  initialUserId?: string;
+}
+
+export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
   const { t } = useI18n();
   const [page, setPage] = useState<Page>();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
+  const [userIdFilter, setUserIdFilter] = useState(initialUserId);
   const [expandedId, setExpandedId] = useState<string>();
   const [detail, setDetail] = useState<UserDetails>();
   const [assignments, setAssignments] = useState<DraftAssignment[]>([]);
@@ -74,29 +79,35 @@ export function AdminUsersPanel() {
   const [error, setError] = useState<ErrorKind | ''>('');
   const [notice, setNotice] = useState('');
 
-  const load = useCallback(async (requestedPage: number, signal?: AbortSignal) => {
-    setLoading(true);
-    setError('');
-    setSupportReady(false);
-    try {
-      const [usersResult, catalogResult, profilesResult] = await Promise.allSettled([
-        getJson<Page>(`/api/v1/admin/users?page=${requestedPage}&pageSize=25`, signal),
-        getJson<{ items: Camera[] }>('/api/v1/admin/cameras?page=1&pageSize=100', signal),
-        getJson<Profile[]>('/api/v1/admin/access-rules', signal),
-      ]);
-      if (usersResult.status === 'rejected') throw usersResult.reason;
-      setPage(usersResult.value);
-      const available = catalogResult.status === 'fulfilled' && profilesResult.status === 'fulfilled';
-      setSupportReady(available);
-      if (catalogResult.status === 'fulfilled') setCameras(catalogResult.value.items);
-      if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value);
-      if (!available && !signal?.aborted) setError('support');
-    } catch (failure) {
-      if (!signal?.aborted) setError(errorKind(failure, 'load'));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (requestedPage: number, signal?: AbortSignal) => {
+      setLoading(true);
+      setError('');
+      setSupportReady(false);
+      try {
+        const [usersResult, catalogResult, profilesResult] = await Promise.allSettled([
+          getJson<Page>(
+            `/api/v1/admin/users?page=${requestedPage}&pageSize=25${userIdFilter ? `&userId=${encodeURIComponent(userIdFilter)}` : ''}`,
+            signal,
+          ),
+          getJson<{ items: Camera[] }>('/api/v1/admin/cameras?page=1&pageSize=100', signal),
+          getJson<Profile[]>('/api/v1/admin/access-rules', signal),
+        ]);
+        if (usersResult.status === 'rejected') throw usersResult.reason;
+        setPage(usersResult.value);
+        const available = catalogResult.status === 'fulfilled' && profilesResult.status === 'fulfilled';
+        setSupportReady(available);
+        if (catalogResult.status === 'fulfilled') setCameras(catalogResult.value.items);
+        if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value);
+        if (!available && !signal?.aborted) setError('support');
+      } catch (failure) {
+        if (!signal?.aborted) setError(errorKind(failure, 'load'));
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [userIdFilter],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -234,6 +245,24 @@ export function AdminUsersPanel() {
           {t('admin.users.total', { count: page?.totalCount ?? 0 })}
         </span>
       </div>
+
+      {userIdFilter && (
+        <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
+          <p className="small text-secondary mb-0" role="status">
+            {t('admin.users.filtered')}
+          </p>
+          <button
+            className="btn btn-outline-light btn-sm"
+            type="button"
+            onClick={() => {
+              setPageNumber(1);
+              setUserIdFilter(undefined);
+            }}
+          >
+            {t('admin.users.clearFilter')}
+          </button>
+        </div>
+      )}
 
       {loading && (
         <p role="status" aria-live="polite">

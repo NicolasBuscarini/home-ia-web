@@ -5,6 +5,7 @@ import { ApiError, getJson, request } from '../../services/http';
 
 interface AccessRequestSummary {
   id: string;
+  userId: string;
   username: string;
   purpose: 'live_monitoring' | 'camera_access';
   status: 'pending' | 'reviewed';
@@ -27,7 +28,11 @@ const statusLabels: Record<AccessRequestSummary['status'], TranslationKey> = {
   reviewed: 'admin.accessRequests.status.reviewed',
 };
 
-export function AdminAccessRequestsPanel() {
+interface AdminAccessRequestsPanelProps {
+  onManageUser: (userId: string) => void;
+}
+
+export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPanelProps) {
   const { t } = useI18n();
   const [pageNumber, setPageNumber] = useState(1);
   const [page, setPage] = useState<AccessRequestPage>();
@@ -41,20 +46,21 @@ export function AdminAccessRequestsPanel() {
       setLoading(true);
       setError('');
       try {
-        setPage(
-          await getJson<AccessRequestPage>(
-            `/api/v1/admin/access-requests?page=${pageNumber}&pageSize=25`,
-            signal,
-          ),
+        const result = await getJson<AccessRequestPage>(
+          `/api/v1/admin/access-requests?page=${pageNumber}&pageSize=25`,
+          signal,
         );
+        if (!signal?.aborted) setPage(result);
       } catch (failure) {
-        setError(
-          failure instanceof ApiError && failure.status === 403
-            ? t('admin.accessRequests.error.forbidden')
-            : t('admin.accessRequests.error.load'),
-        );
+        if (!signal?.aborted) {
+          setError(
+            failure instanceof ApiError && failure.status === 403
+              ? t('admin.accessRequests.error.forbidden')
+              : t('admin.accessRequests.error.load'),
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!signal?.aborted) setLoading(false);
       }
     },
     [pageNumber, t],
@@ -73,8 +79,16 @@ export function AdminAccessRequestsPanel() {
     try {
       const response = await request(`/api/v1/admin/access-requests/${item.id}/review`, { method: 'POST' });
       if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
+      setPage(
+        (current) =>
+          current && {
+            ...current,
+            items: current.items.map((requestItem) =>
+              requestItem.id === item.id ? { ...requestItem, status: 'reviewed' } : requestItem,
+            ),
+          },
+      );
       setNotice(t('admin.accessRequests.notice.reviewed'));
-      await load();
     } catch (failure) {
       setError(
         failure instanceof ApiError && failure.status === 403
@@ -123,18 +137,27 @@ export function AdminAccessRequestsPanel() {
                     {t(statusLabels[item.status])} · {new Date(item.createdAtUtc).toLocaleString()}
                   </p>
                 </div>
-                {item.status === 'pending' && (
+                <div className="d-flex flex-wrap gap-2">
                   <button
                     className="btn btn-outline-light btn-sm"
                     type="button"
-                    disabled={!!busyId}
-                    onClick={() => void review(item)}
+                    onClick={() => onManageUser(item.userId)}
                   >
-                    {busyId === item.id
-                      ? t('admin.accessRequests.reviewing')
-                      : t('admin.accessRequests.review')}
+                    {t('admin.accessRequests.manageUser')}
                   </button>
-                )}
+                  {item.status === 'pending' && (
+                    <button
+                      className="btn btn-outline-light btn-sm"
+                      type="button"
+                      disabled={!!busyId}
+                      onClick={() => void review(item)}
+                    >
+                      {busyId === item.id
+                        ? t('admin.accessRequests.reviewing')
+                        : t('admin.accessRequests.review')}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

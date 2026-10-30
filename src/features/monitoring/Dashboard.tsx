@@ -26,11 +26,16 @@ interface DashboardProps {
 export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole }: DashboardProps) {
   const { t } = useI18n();
   const [active, setActive] = useState<DashboardView>('monitor');
+  const [userIdFilter, setUserIdFilter] = useState<string>();
   const [playerStatus, setPlayerStatus] = useState('Player ainda não iniciado');
   const playerAnchorRef = useRef<HTMLDivElement>(null);
   const didAutoScrollRef = useRef(false);
   const isAdmin = userRole === 'Administrator';
   const camera = cameras.find((item) => item.cameraId === selectedCameraId);
+  function manageRequestedUser(userId: string) {
+    setUserIdFilter(userId);
+    setActive('users');
+  }
   useEffect(() => {
     if (didAutoScrollRef.current || active !== 'monitor' || !camera) return;
     const frame = window.requestAnimationFrame(() => {
@@ -128,7 +133,7 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
       )}
       {isAdmin && active === 'users' && (
         <section id="view-users" aria-label={t('dashboard.menu.users')}>
-          <AdminUsersPanel />
+          <AdminUsersPanel initialUserId={userIdFilter} />
         </section>
       )}
       {isAdmin && active === 'profiles' && (
@@ -138,7 +143,7 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
       )}
       {isAdmin && active === 'requests' && (
         <section id="view-requests" aria-label={t('dashboard.menu.accessRequests')}>
-          <AdminAccessRequestsPanel />
+          <AdminAccessRequestsPanel onManageUser={manageRequestedUser} />
         </section>
       )}
     </section>

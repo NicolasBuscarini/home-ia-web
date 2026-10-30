@@ -53,9 +53,10 @@ describe('access request screens', () => {
     expect(JSON.parse(submitted?.body ?? '{}').idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
-  it('shows request state to administrators and marks review without an access grant action', async () => {
+  it('shows request state, marks review without reloading, and opens the exact user in management', async () => {
     let status = 'pending';
     const calls: string[] = [];
+    const onManageUser = vi.fn();
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input);
       calls.push(`${init?.method ?? 'GET'} ${path}`);
@@ -64,6 +65,7 @@ describe('access request screens', () => {
           items: [
             {
               id: 'request-1',
+              userId: 'user-1',
               username: 'local-user',
               purpose: 'live_monitoring',
               status,
@@ -84,14 +86,17 @@ describe('access request screens', () => {
     const user = userEvent.setup();
     render(
       <I18nProvider>
-        <AdminAccessRequestsPanel />
+        <AdminAccessRequestsPanel onManageUser={onManageUser} />
       </I18nProvider>,
     );
     expect(await screen.findByText('local-user')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Gerenciar usuário' }));
+    expect(onManageUser).toHaveBeenCalledWith('user-1');
     await user.click(screen.getByRole('button', { name: 'Marcar como analisado' }));
     expect(await screen.findByText(/Analisado/)).toBeInTheDocument();
     expect(screen.getByText(/as permissões do usuário não foram alteradas/i)).toBeInTheDocument();
     expect(calls).toContain('POST /api/v1/admin/access-requests/request-1/review');
+    expect(calls.filter((call) => call.startsWith('GET /api/v1/admin/access-requests?'))).toHaveLength(1);
     expect(calls.some((call) => call.includes('/access-rules') || call.includes('/access-profiles'))).toBe(
       false,
     );

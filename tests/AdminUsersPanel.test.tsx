@@ -29,6 +29,30 @@ afterEach(() => {
 });
 
 describe('administrative user management', () => {
+  it('requests the paginated account list with the selected userId filter', async () => {
+    const paths: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      paths.push(path);
+      if (path.startsWith('/api/v1/admin/users?page=1&pageSize=25&userId=user-1'))
+        return response({ items: [account], page: 1, pageSize: 25, totalCount: 1 });
+      if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [camera] });
+      if (path === '/api/v1/admin/access-rules') return response([profile]);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    render(
+      <I18nProvider>
+        <AdminUsersPanel initialUserId="user-1" />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'local-user' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Exibindo uma única conta filtrada');
+    expect(paths).toContain('/api/v1/admin/users?page=1&pageSize=25&userId=user-1');
+    expect(screen.getByRole('button', { name: 'Limpar filtro de usuário' })).toBeInTheDocument();
+  });
+
   it('assigns only an existing profile with explicit camera scope', async () => {
     let savedAssignments: Array<Record<string, unknown>> = [];
     const requests: Array<{ path: string; method: string; body?: string }> = [];

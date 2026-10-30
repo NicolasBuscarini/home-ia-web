@@ -113,6 +113,7 @@ const enUS = {
   'admin.accessRequests.title': 'Access requests',
   'admin.accessRequests.description':
     'Review requests here, then assign access separately in Users. Reviewing never grants permissions. Email delivery is not configured.',
+  'admin.accessRequests.manageUser': 'Manage user',
   'admin.accessRequests.loading': 'Loading requests…',
   'admin.accessRequests.empty': 'There are no access requests.',
   'admin.accessRequests.status.pending': 'Pending review',
@@ -132,6 +133,8 @@ const enUS = {
   'admin.users.title': 'User management',
   'admin.users.description':
     'Manage accounts and assign existing permission profiles within explicit camera scopes.',
+  'admin.users.filtered': 'Showing one filtered account',
+  'admin.users.clearFilter': 'Clear user filter',
   'admin.users.total': '{count} accounts',
   'admin.users.loading': 'Loading accounts…',
   'admin.users.loadingDetail': 'Loading account details…',
@@ -478,6 +481,7 @@ const ptBR: Record<TranslationKey, string> = {
   'admin.accessRequests.title': 'Pedidos de acesso',
   'admin.accessRequests.description':
     'Analise o pedido aqui e atribua acesso separadamente em Usuários. A análise não concede permissões. O envio de e-mail não está configurado.',
+  'admin.accessRequests.manageUser': 'Gerenciar usuário',
   'admin.accessRequests.loading': 'Carregando pedidos…',
   'admin.accessRequests.empty': 'Não há pedidos de acesso.',
   'admin.accessRequests.status.pending': 'Aguardando análise',
@@ -498,6 +502,8 @@ const ptBR: Record<TranslationKey, string> = {
   'admin.users.title': 'Gestão de usuários',
   'admin.users.description':
     'Gerencie contas e atribua perfis de permissões existentes dentro de escopos explícitos de câmera.',
+  'admin.users.filtered': 'Exibindo uma única conta filtrada',
+  'admin.users.clearFilter': 'Limpar filtro de usuário',
   'admin.users.total': '{count} contas',
   'admin.users.loading': 'Carregando contas…',
   'admin.users.loadingDetail': 'Carregando detalhes da conta…',
