@@ -55,6 +55,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const hlsRef = useRef<Hls | undefined>(undefined);
   const urlRef = useRef<string | undefined>(undefined);
   const wasPlayingRef = useRef(false);
+  const lastCaptureStatus = useRef<string | undefined>(undefined);
   const [playerStatus, setPlayerStatus] = useState('Player ainda não iniciado');
   const [playerState, setPlayerState] = useState<'healthy' | 'pending' | 'degraded' | 'failed'>('pending');
   const [message, setMessage] = useState('Use os controles do painel para iniciar áudio e vídeo.');
@@ -71,14 +72,22 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     const video = videoRef.current;
     if (!video) return;
     const oldEpoch = video.dataset.streamEpoch ?? '';
+    const returnedToCapture =
+      camera.status === 'capturing' &&
+      lastCaptureStatus.current !== undefined &&
+      lastCaptureStatus.current !== 'capturing';
+    lastCaptureStatus.current = camera.status;
     if (
       camera.liveUrl === urlRef.current &&
       camera.status === 'capturing' &&
-      oldEpoch === (camera.streamEpoch ?? '')
+      oldEpoch === (camera.streamEpoch ?? '') &&
+      !returnedToCapture
     )
       return;
     const restart =
-      Boolean(urlRef.current) && camera.status === 'capturing' && oldEpoch !== camera.streamEpoch;
+      Boolean(urlRef.current) &&
+      camera.status === 'capturing' &&
+      (oldEpoch !== camera.streamEpoch || returnedToCapture);
     const resume = restart && !video.paused && !video.ended;
     wasPlayingRef.current = resume || wasPlayingRef.current;
     hlsRef.current?.destroy();

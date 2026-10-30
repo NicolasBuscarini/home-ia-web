@@ -52,68 +52,78 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
 
   useEffect(() => {
     let active = true;
+    let updateInFlight = false;
     const controller = new AbortController();
     const update = async () => {
-      const [liveResult, readyResult] = await Promise.allSettled([
-        getJson<{ status: string }>('/health/live', controller.signal),
-        request('/health/ready', { signal: controller.signal }),
-      ]);
-      if (!active) return;
-      setApiHealth(
-        liveResult.status === 'fulfilled'
-          ? { label: 'Operacional', state: 'healthy' }
-          : { label: 'Indisponível', state: 'failed' },
-      );
-      if (readyResult.status === 'fulfilled' && (readyResult.value.ok || readyResult.value.status === 503)) {
-        try {
-          setReadiness((await readyResult.value.json()) as ReadinessResponse);
-        } catch {
-          setReadiness(undefined);
-        }
-      } else setReadiness(undefined);
-
-      if (!profileLoaded.current) {
-        try {
-          setProfile(await getJson<SystemProfile>('/api/v1/system-profile', controller.signal));
-          profileLoaded.current = true;
-        } catch {
-          /* Admin profile is optional presentation data. */
-        }
-      }
-      if (Date.now() - lastGatewayCheck.current < 15000) {
-        if (active) setUpdated(`Atualizado ${new Date().toLocaleTimeString('pt-BR')}`);
-        return;
-      }
-      lastGatewayCheck.current = Date.now();
-      const started = performance.now();
+      if (updateInFlight) return;
+      updateInFlight = true;
       try {
-        const response = await request(camera.liveUrl, { signal: controller.signal });
+        const [liveResult, readyResult] = await Promise.allSettled([
+          getJson<{ status: string }>('/health/live', controller.signal),
+          request('/health/ready', { signal: controller.signal }),
+        ]);
         if (!active) return;
-        const body = await response.text();
-        if (response.status === 401) {
-          setGateway({ label: 'Sessão expirada', state: 'failed' });
-          setGatewayDependency({ label: 'Sem sessão', state: 'failed' });
-        } else if (response.ok && body.startsWith('#EXTM3U')) {
-          setGateway({ label: 'Disponível', state: 'healthy' });
-          setGatewayDetail(`Playlist autenticada · ${Math.round(performance.now() - started)} ms`);
-          setGatewayDependency({ label: 'Disponível', state: 'healthy' });
-        } else if (response.status === 503) {
-          setGateway({ label: 'Aguardando segmentos', state: 'degraded' });
-          setGatewayDetail('A fonte ainda não publicou segmentos para o live.');
-          setGatewayDependency({ label: 'Sem segmentos', state: 'degraded' });
-        } else {
-          setGateway({ label: `HTTP ${response.status}`, state: 'failed' });
-          setGatewayDetail('Resposta inesperada do gateway local.');
-          setGatewayDependency({ label: `HTTP ${response.status}`, state: 'failed' });
+        setApiHealth(
+          liveResult.status === 'fulfilled'
+            ? { label: 'Operacional', state: 'healthy' }
+            : { label: 'Indisponível', state: 'failed' },
+        );
+        if (
+          readyResult.status === 'fulfilled' &&
+          (readyResult.value.ok || readyResult.value.status === 503)
+        ) {
+          try {
+            setReadiness((await readyResult.value.json()) as ReadinessResponse);
+          } catch {
+            setReadiness(undefined);
+          }
+        } else setReadiness(undefined);
+
+        if (!profileLoaded.current) {
+          try {
+            setProfile(await getJson<SystemProfile>('/api/v1/system-profile', controller.signal));
+            profileLoaded.current = true;
+          } catch {
+            /* Admin profile is optional presentation data. */
+          }
         }
-      } catch {
-        if (active) {
-          setGateway({ label: 'Sem conexão', state: 'failed' });
-          setGatewayDetail('Não foi possível consultar a playlist local.');
-          setGatewayDependency({ label: 'Sem conexão', state: 'failed' });
+        if (Date.now() - lastGatewayCheck.current < 15000) {
+          if (active) setUpdated(`Atualizado ${new Date().toLocaleTimeString('pt-BR')}`);
+          return;
         }
+        lastGatewayCheck.current = Date.now();
+        const started = performance.now();
+        try {
+          const response = await request(camera.liveUrl, { signal: controller.signal });
+          if (!active) return;
+          const body = await response.text();
+          if (response.status === 401) {
+            setGateway({ label: 'Sessão expirada', state: 'failed' });
+            setGatewayDependency({ label: 'Sem sessão', state: 'failed' });
+          } else if (response.ok && body.startsWith('#EXTM3U')) {
+            setGateway({ label: 'Disponível', state: 'healthy' });
+            setGatewayDetail(`Playlist autenticada · ${Math.round(performance.now() - started)} ms`);
+            setGatewayDependency({ label: 'Disponível', state: 'healthy' });
+          } else if (response.status === 503) {
+            setGateway({ label: 'Aguardando segmentos', state: 'degraded' });
+            setGatewayDetail('A fonte ainda não publicou segmentos para o live.');
+            setGatewayDependency({ label: 'Sem segmentos', state: 'degraded' });
+          } else {
+            setGateway({ label: `HTTP ${response.status}`, state: 'failed' });
+            setGatewayDetail('Resposta inesperada do gateway local.');
+            setGatewayDependency({ label: `HTTP ${response.status}`, state: 'failed' });
+          }
+        } catch {
+          if (active) {
+            setGateway({ label: 'Sem conexão', state: 'failed' });
+            setGatewayDetail('Não foi possível consultar a playlist local.');
+            setGatewayDependency({ label: 'Sem conexão', state: 'failed' });
+          }
+        }
+        if (active) setUpdated(`Atualizado ${new Date().toLocaleTimeString('pt-BR')}`);
+      } finally {
+        updateInFlight = false;
       }
-      if (active) setUpdated(`Atualizado ${new Date().toLocaleTimeString('pt-BR')}`);
     };
     void update();
     const timer = window.setInterval(() => void update(), 3000);
