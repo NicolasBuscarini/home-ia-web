@@ -31,4 +31,21 @@ describe('theme preference', () => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'ocean');
     setItem.mockRestore();
   });
+
+  it('recognizes and persists every theme, including the added palettes', () => {
+    for (const theme of [
+      'forest',
+      'graphite',
+      'ocean',
+      'light',
+      'lavender',
+      'sunset',
+      'amber',
+      'rose',
+    ] as const) {
+      applyTheme(theme);
+      expect(document.documentElement).toHaveAttribute('data-theme', theme);
+      expect(readSavedTheme()).toBe(theme);
+    }
+  });
 });

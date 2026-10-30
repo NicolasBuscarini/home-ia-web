@@ -1,18 +1,7 @@
 import { type KeyboardEvent, useRef } from 'react';
+import { useI18n } from '../i18n/i18n';
 
 export type DashboardTab = 'monitor' | 'health' | 'dependencies' | 'capture';
-
-interface TabDefinition {
-  id: DashboardTab;
-  label: string;
-}
-
-const ADMIN_TABS: TabDefinition[] = [
-  { id: 'monitor', label: 'Monitoramento' },
-  { id: 'health', label: 'Saúde do sistema' },
-  { id: 'dependencies', label: 'Dependências' },
-  { id: 'capture', label: 'Segmentos e lacunas' },
-];
 
 interface DashboardTabsProps {
   active: DashboardTab;
@@ -21,8 +10,15 @@ interface DashboardTabsProps {
 }
 
 export function DashboardTabs({ active, isAdmin, onChange }: DashboardTabsProps) {
+  const { t } = useI18n();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const tabs = isAdmin ? ADMIN_TABS : ADMIN_TABS.slice(0, 1);
+  const allTabs: Array<{ id: DashboardTab; label: string }> = [
+    { id: 'monitor', label: t('dashboard.tabs.monitor') },
+    { id: 'health', label: t('dashboard.tabs.health') },
+    { id: 'dependencies', label: t('dashboard.tabs.dependencies') },
+    { id: 'capture', label: t('dashboard.tabs.capture') },
+  ];
+  const tabs = isAdmin ? allTabs : allTabs.slice(0, 1);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const current = tabs.findIndex((tab) => tab.id === active);
@@ -44,7 +40,12 @@ export function DashboardTabs({ active, isAdmin, onChange }: DashboardTabsProps)
   }
 
   return (
-    <div className="view-tabs mb-3" role="tablist" aria-label="Telas do painel" onKeyDown={onKeyDown}>
+    <div
+      className="view-tabs mb-3"
+      role="tablist"
+      aria-label={t('dashboard.tabs.label')}
+      onKeyDown={onKeyDown}
+    >
       {tabs.map((tab, index) => (
         <button
           key={tab.id}

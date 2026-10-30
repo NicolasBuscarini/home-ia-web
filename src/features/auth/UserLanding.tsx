@@ -1,17 +1,15 @@
+import { useI18n } from '../../i18n/i18n';
+
 export function UserLanding() {
+  const { t } = useI18n();
   return (
     <section className="panel-card user-landing mx-auto" aria-labelledby="user-landing-title" tabIndex={-1}>
-      <span className="eyebrow">CONTA LOCAL</span>
+      <span className="eyebrow">{t('auth.user.eyebrow')}</span>
       <h2 id="user-landing-title" className="h4 mt-2">
-        Conta ativa
+        {t('auth.user.title')}
       </h2>
-      <p>
-        Seu papel é <strong>User</strong>. Nenhuma câmera foi concedida a esta conta, então o monitoramento
-        não está disponível.
-      </p>
-      <p className="text-secondary mb-0">
-        Solicitação de acesso e recuperação de senha ainda não estão disponíveis neste perfil local.
-      </p>
+      <p>{t('auth.user.role', { role: t('role.user') })}</p>
+      <p className="text-secondary mb-0">{t('auth.user.limits')}</p>
     </section>
   );
 }

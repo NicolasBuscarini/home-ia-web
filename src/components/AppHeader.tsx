@@ -1,4 +1,6 @@
 import type { UserRole } from '../domain/platform';
+import { useI18n } from '../i18n/i18n';
+import { LOCALES, type Locale } from '../i18n/messages';
 import type { ThemeId } from '../theme/theme';
 import { ThemeSelector } from './ThemeSelector';
 
@@ -19,6 +21,7 @@ export function AppHeader({
   onLogout,
   busy = false,
 }: AppHeaderProps) {
+  const { locale, setLocale, t } = useI18n();
   return (
     <header className="app-header d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 mb-lg-5">
       <div className="d-flex align-items-center gap-3">
@@ -43,15 +46,35 @@ export function AppHeader({
           <p className="eyebrow mb-1">
             GARAGEM IA <span className="brand-separator">/</span> LOCAL
           </p>
-          <h1 className="h3 mb-0">Painel da garagem</h1>
+          <h1 className="h3 mb-0">{t('app.title')}</h1>
         </div>
       </div>
       <div className="header-actions d-flex align-items-center justify-content-end gap-2">
+        <label className="visually-hidden" htmlFor="language-select">
+          {t('language.label')}
+        </label>
+        <select
+          id="language-select"
+          className="form-select form-select-sm"
+          aria-label={t('language.label')}
+          value={locale}
+          onChange={(event) => setLocale(event.currentTarget.value as Locale)}
+        >
+          {LOCALES.map((option) => (
+            <option key={option} value={option}>
+              {t(`language.${option}`)}
+            </option>
+          ))}
+        </select>
         <ThemeSelector value={theme} onChange={onThemeChange} />
         {activeClients !== undefined && (
-          <span className="client-count" role="status" aria-label="Clientes conectados" aria-live="polite">
-            <span aria-hidden="true">●</span> <strong>{activeClients}</strong>{' '}
-            <span className="client-count-label">clientes</span>
+          <span
+            className="client-count"
+            role="status"
+            aria-label={t('header.clients.other', { count: activeClients })}
+            aria-live="polite"
+          >
+            <span aria-hidden="true">●</span> {t('header.clients.other', { count: activeClients })}
           </span>
         )}
         {role && (
@@ -61,7 +84,7 @@ export function AppHeader({
             onClick={onLogout}
             disabled={busy}
           >
-            {busy ? 'Saindo…' : 'Sair'}
+            {busy ? t('header.logoutBusy') : t('header.logout')}
           </button>
         )}
       </div>

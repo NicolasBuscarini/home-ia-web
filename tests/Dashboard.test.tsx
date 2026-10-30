@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Dashboard } from '../src/features/monitoring/Dashboard';
+import { I18nProvider } from '../src/i18n/i18n';
 
 afterEach(() => cleanup());
 
@@ -11,9 +12,17 @@ const camera = {
   liveUrl: '/api/v1/live/garage-01/index.m3u8',
 };
 
+function renderDashboard(userRole: 'Viewer' | 'Administrator') {
+  return render(
+    <I18nProvider>
+      <Dashboard camera={camera} userRole={userRole} />
+    </I18nProvider>,
+  );
+}
+
 describe('dashboard navigation', () => {
   it('exposes only monitor view to Viewer and switches panels using keyboard', () => {
-    render(<Dashboard camera={camera} userRole="Viewer" />);
+    renderDashboard('Viewer');
     const tabs = screen.getByRole('tablist', { name: 'Telas do painel' });
     expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
     expect(screen.getByRole('tabpanel', { name: 'Monitoramento' })).toBeInTheDocument();
@@ -21,7 +30,7 @@ describe('dashboard navigation', () => {
   });
 
   it('shows operational tabs only for Administrator and maintains tab selection', () => {
-    render(<Dashboard camera={camera} userRole="Administrator" />);
+    renderDashboard('Administrator');
     const tabs = screen.getByRole('tablist', { name: 'Telas do painel' });
     expect(within(tabs).getAllByRole('tab')).toHaveLength(4);
     for (const tab of within(tabs).getAllByRole('tab')) {

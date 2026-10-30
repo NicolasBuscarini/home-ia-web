@@ -25,7 +25,13 @@ O comando instala somente conforme `package-lock.json`, verifica lint/formataç�
 
 `garage-watch-platform` fixa este projeto como submódulo Git em um commit revisado. O build Docker executa `npm ci`/Vite e copia apenas os arquivos estáticos para o webroot do host API. Atualizações de UI exigem atualizar o ponteiro do submódulo e passar também pelos testes de integração da API.
 
-Temas disponíveis: Bosque (padrão), Grafite, Oceano e Claro. A seleção é local ao browser e não afeta configurações/contas no servidor.
+Temas disponíveis: Bosque (padrão), Grafite, Oceano, Claro, Lavanda, Pôr do sol, Âmbar e Rosa. O seletor apresenta amostras de fundo, painel e cor de destaque junto a uma mini prévia; a seleção é local ao browser e não afeta configurações/contas no servidor.
+
+No monitoramento autenticado, o vídeo ao vivo inicia automaticamente sem áudio; o usuário pode ativar o som nos controles. HLS.js mantém um buffer curto (meta 12 s, máximo 18 s, 6 s anteriores e limite de 48 MB); isso não é um histórico de 15 minutos. A identidade efêmera de presença fica em `sessionStorage` para manter a mesma aba ao recarregar, sem cookie/localStorage nem persistência no servidor.
+
+Idiomas disponíveis: Português (Brasil) e English (US). A seleção fica salva no browser; na primeira visita, o idioma do navegador escolhe inglês quando compatível e, nos demais casos, usa pt-BR. Componentes obtêm `t()` e o idioma por `useI18n()`; novas mensagens são adicionadas uma única vez por locale ao catálogo tipado em `src/i18n/messages.ts`, com interpolação de valores, sem ramificações de interface duplicadas.
+
+Execute as verificações a partir do repositório de contexto com `./garage verify-web`; ele encaminha ao Compose fixado do projeto web.
 
 ## Limites
 

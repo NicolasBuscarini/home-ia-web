@@ -14,6 +14,9 @@
 - Componentes coesos por funcionalidade; dados remotos passam por cliente HTTP same-origin tipado, com timeout, erros explícitos e sem armazenar senha/cookie em JavaScript.
 - Tratar UI como comportamento: teclado/foco, semântica/ARIA, responsividade, estados de loading/empty/error, mensagens em português e preferências visuais persistidas sem dados sensíveis.
 - Temas usam tokens CSS próprios e Bootstrap local; testar persistência e seleção. Respeitar `prefers-reduced-motion` e contraste.
+- O player HLS deve manter os limites existentes de buffer curtos e finitos (`maxBufferLength: 12`, `maxMaxBufferLength: 18`, `backBufferLength: 6`, `maxBufferSize: 48_000_000` bytes de mídia comprimida), destruir instâncias/handlers ao trocar epoch ou desmontar, e não agendar render React se posição/duração/estado live visíveis não mudarem. Isso limita o buffer de mídia gerenciado pelo HLS.js, não a memória total de vídeo/decoder do browser; não atribuir aumento de RSS a histórico ilimitado sem medição. Não configurar janela de 15 min como buffer de browser: retenção/spool e janela seekable são conceitos distintos. Para câmera capturando, tentar autoplay no live edge sem áudio; autoplay é best-effort e requer fallback acessível se bloqueado. Áudio exige ação explícita.
+- O ID de presença é um UUID aleatório, efêmero por aba, guardado somente em `sessionStorage` para sobreviver a reloads da mesma aba e evitar leases duplicados durante o TTL do servidor. Nunca é credencial nem deve ir a localStorage/cookie/API de perfil; se sessionStorage estiver indisponível, a estabilidade fica limitada ao carregamento atual. Não alterar sem decisão o heartbeat/TTL/contagem server-side.
+- Todo texto visível/ARIA deve vir do catálogo tipado `src/i18n/messages.ts`; usar `useI18n()` em componentes sem propagar idioma manualmente. Ao adicionar chave, preencher `pt-BR` e `en-US`; manter interpolação para valores e evitar lógica/código duplicado por idioma. Persistência e detecção de idioma ficam centralizadas em `src/i18n/i18n.tsx`.
 - Testar fluxos observáveis com Vitest/Testing Library. Os testes deste projeto complementam, não substituem, a integração da API real em `garage-watch-platform`.
 - Fixar Node, dependências e imagens por versão/hash quando selecionados; Compose é o ambiente documentado de instalação/verificação.
 
@@ -21,3 +24,4 @@
 
 - Executar dentro de Compose: `npm ci`, Biome, Vitest e build Vite.
 - Atualizar `README.md`, contratos locais e instruções compartilhadas ao mudar fluxo/API, tema, build ou integração com a plataforma.
+- Para validar performance real do player, executar a observação de 10 min desktop/celular de CT38 e registrar browser/dispositivo e condições; testes automatizados e os caps HLS não comprovam estabilidade de RSS/decoder nem compatibilidade de autoplay em hardware real.

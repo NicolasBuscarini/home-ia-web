@@ -4,31 +4,19 @@ import type { AuthenticatedUser, CameraStatus, UserRole } from './domain/platfor
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
 import { Dashboard } from './features/monitoring/Dashboard';
+import { I18nProvider, useI18n } from './i18n/i18n';
+import { getOrCreateClientId } from './services/clientIdentity';
 import { ApiError, getJson, postJson, request } from './services/http';
 import { applyTheme, readSavedTheme, type ThemeId } from './theme/theme';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
 
-function createClientId(): string | undefined {
-  try {
-    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
-    if (!globalThis.crypto?.getRandomValues) return undefined;
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
-    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-    const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  } catch {
-    return undefined;
-  }
-}
-
 function validateRole(role: string): role is UserRole {
   return ['Administrator', 'Viewer', 'User'].includes(role);
 }
 
-export default function App() {
+function AppContent() {
+  const { t } = useI18n();
   const [screen, setScreen] = useState<ScreenState>('loading');
   const [role, setRole] = useState<UserRole>();
   const [camera, setCamera] = useState<CameraStatus>();
@@ -76,13 +64,13 @@ export default function App() {
     void checkSession().catch(() => {
       if (active) {
         setScreen('error');
-        setError('Não foi possível consultar o serviço local. Confirme se a plataforma está iniciada.');
+        setError(t('app.error.session'));
       }
     });
     return () => {
       active = false;
     };
-  }, [checkSession]);
+  }, [checkSession, t]);
 
   useEffect(() => {
     if (screen !== 'authenticated' || !role || role === 'User') return;
@@ -122,7 +110,7 @@ export default function App() {
             setRole(undefined);
             setCamera(undefined);
             setClientCount(undefined);
-          } else setError('Sem resposta da plataforma. O painel tentará atualizar novamente.');
+          } else setError(t('app.error.offline'));
         }
       } finally {
         pollInFlight.current = false;
@@ -134,11 +122,11 @@ export default function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [screen, role]);
+  }, [screen, role, t]);
 
   useEffect(() => {
     if (screen !== 'authenticated' || !role || role === 'User') return;
-    const id = createClientId();
+    const id = getOrCreateClientId();
     if (!id) {
       setClientCount('—');
       return;
@@ -201,7 +189,7 @@ export default function App() {
       await loadAuthenticatedState();
     } catch {
       setScreen('error');
-      setError('A sessão foi criada, mas não foi possível carregar o painel. Tente atualizar a página.');
+      setError(t('app.error.sessionCreated'));
     }
   }
 
@@ -217,8 +205,8 @@ export default function App() {
       />
       {screen === 'loading' && (
         <section className="panel-card feedback-panel" role="status" aria-live="polite">
-          <span className="eyebrow">INICIANDO</span>
-          <p className="mb-0 mt-2">Consultando sessão local…</p>
+          <span className="eyebrow">{t('app.loading.eyebrow')}</span>
+          <p className="mb-0 mt-2">{t('app.loading.message')}</p>
         </section>
       )}
       {screen === 'anonymous' && <AuthenticationPanel onAuthenticated={handleAuthenticated} />}
@@ -228,9 +216,9 @@ export default function App() {
       )}
       {screen === 'error' && (
         <section className="panel-card feedback-panel" aria-labelledby="service-error-title">
-          <span className="eyebrow">SERVIÇO LOCAL</span>
+          <span className="eyebrow">{t('app.error.eyebrow')}</span>
           <h2 id="service-error-title" className="h5 mt-2">
-            Não foi possível abrir o painel
+            {t('app.error.title')}
           </h2>
           <p className="error-text mb-3" role="alert">
             {error}
@@ -242,13 +230,11 @@ export default function App() {
               setScreen('loading');
               void checkSession().catch(() => {
                 setScreen('error');
-                setError(
-                  'Não foi possível consultar o serviço local. Confirme se a plataforma está iniciada.',
-                );
+                setError(t('app.error.session'));
               });
             }}
           >
-            Tentar novamente
+            {t('app.error.retry')}
           </button>
         </section>
       )}
@@ -258,5 +244,13 @@ export default function App() {
         </p>
       )}
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   );
 }
