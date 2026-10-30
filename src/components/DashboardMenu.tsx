@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n/i18n';
 import type { TranslationKey } from '../i18n/messages';
 
-export type DashboardView = 'monitor' | 'health' | 'dependencies' | 'capture' | 'users' | 'profiles';
+export type DashboardView =
+  | 'monitor'
+  | 'health'
+  | 'dependencies'
+  | 'capture'
+  | 'users'
+  | 'profiles'
+  | 'requests';
 type MenuGroup = 'system' | 'management';
 
 const viewLabels: Record<DashboardView, TranslationKey> = {
@@ -12,6 +19,7 @@ const viewLabels: Record<DashboardView, TranslationKey> = {
   capture: 'dashboard.menu.capture',
   users: 'dashboard.menu.users',
   profiles: 'dashboard.menu.profiles',
+  requests: 'dashboard.menu.accessRequests',
 };
 
 interface DashboardMenuProps {
@@ -111,7 +119,7 @@ export function DashboardMenu({ active, isAdmin, onChange }: DashboardMenuProps)
             </button>
             {openGroup === 'management' && (
               <div className="dashboard-submenu" id="dashboard-submenu-management">
-                {(['users', 'profiles'] as const).map((view) => (
+                {(['users', 'profiles', 'requests'] as const).map((view) => (
                   <button
                     key={view}
                     className="dashboard-submenu-item"

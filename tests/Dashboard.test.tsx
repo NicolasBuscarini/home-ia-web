@@ -55,6 +55,10 @@ describe('dashboard navigation', () => {
         });
       if (path === '/api/v1/admin/cameras?page=1&pageSize=100')
         return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      if (path === '/api/v1/admin/access-requests?page=1&pageSize=25')
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 25, totalCount: 0 }), {
+          status: 200,
+        });
       throw new Error(`Unexpected request: ${path}`);
     });
     renderDashboard('Administrator');
@@ -83,6 +87,10 @@ describe('dashboard navigation', () => {
     await userEvent.setup().click(within(menu).getByRole('button', { name: 'Perfis e permissões' }));
     expect(await screen.findByRole('heading', { name: 'Perfis e permissões' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gestão de usuários' })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(management);
+    await userEvent.setup().click(within(menu).getByRole('button', { name: 'Pedidos de acesso' }));
+    expect(await screen.findByRole('heading', { name: 'Pedidos de acesso' })).toBeInTheDocument();
   });
 
   it('presents one camera without adding a redundant selector', () => {

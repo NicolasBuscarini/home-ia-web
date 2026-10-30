@@ -74,6 +74,7 @@ describe('application shell', () => {
       if (path === '/api/v1/auth/session') return json({ authenticated: false });
       if (path === '/api/v1/auth/login') return new Response(null, { status: 204 });
       if (path === '/api/v1/auth/me') return json({ username: 'local-user', role: 'User' });
+      if (path === '/api/v1/access-requests/mine') return json({ request: null });
       throw new Error(`Unexpected request ${path}`);
     });
     const user = userEvent.setup();

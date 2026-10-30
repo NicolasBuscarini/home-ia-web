@@ -4,6 +4,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus, UserRole } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/messages';
+import { AdminAccessRequestsPanel } from '../admin/AdminAccessRequestsPanel';
 import { AdminProfilesPanel } from '../admin/AdminProfilesPanel';
 import { AdminUsersPanel } from '../admin/AdminUsersPanel';
 import { OperationsPanel } from '../operations/OperationsPanel';
@@ -133,6 +134,11 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
       {isAdmin && active === 'profiles' && (
         <section id="view-profiles" aria-label={t('dashboard.menu.profiles')}>
           <AdminProfilesPanel />
+        </section>
+      )}
+      {isAdmin && active === 'requests' && (
+        <section id="view-requests" aria-label={t('dashboard.menu.accessRequests')}>
+          <AdminAccessRequestsPanel />
         </section>
       )}
     </section>

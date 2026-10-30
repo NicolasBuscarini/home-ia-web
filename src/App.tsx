@@ -242,7 +242,9 @@ function AppContent() {
         </section>
       )}
       {screen === 'anonymous' && <AuthenticationPanel onAuthenticated={handleAuthenticated} />}
-      {screen === 'authenticated' && role && !canMonitor && <UserLanding />}
+      {screen === 'authenticated' && role && !canMonitor && (
+        <UserLanding canRequestAccess={role === 'User'} />
+      )}
       {screen === 'authenticated' && role && canMonitor && (
         <Dashboard
           cameras={cameras}
