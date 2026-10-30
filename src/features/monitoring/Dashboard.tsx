@@ -50,6 +50,12 @@ export function Dashboard({ camera, userRole }: DashboardProps) {
           <OperationsPanel camera={camera} view={active} playerStatus={playerStatus} />
         </section>
       )}
+      {isAdmin &&
+        (['health', 'dependencies', 'capture'] as const)
+          .filter((tab) => tab !== active)
+          .map((tab) => (
+            <section key={tab} id={`view-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} hidden />
+          ))}
     </section>
   );
 }

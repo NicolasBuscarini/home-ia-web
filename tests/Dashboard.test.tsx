@@ -24,7 +24,21 @@ describe('dashboard navigation', () => {
     render(<Dashboard camera={camera} userRole="Administrator" />);
     const tabs = screen.getByRole('tablist', { name: 'Telas do painel' });
     expect(within(tabs).getAllByRole('tab')).toHaveLength(4);
+    for (const tab of within(tabs).getAllByRole('tab')) {
+      expect(document.getElementById(tab.getAttribute('aria-controls') ?? '')).toBeInTheDocument();
+    }
     const healthTab = screen.getByRole('tab', { name: 'Saúde do sistema' });
+    healthTab.focus();
+    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
+    expect(healthTab).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
+    const dependenciesTab = screen.getByRole('tab', { name: 'Dependências' });
+    expect(dependenciesTab).toHaveFocus();
+    expect(dependenciesTab).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(tabs, { key: 'End' });
+    const captureTab = screen.getByRole('tab', { name: 'Segmentos e lacunas' });
+    expect(captureTab).toHaveFocus();
+    expect(captureTab).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(healthTab);
     expect(healthTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Saúde do sistema' })).toBeInTheDocument();
