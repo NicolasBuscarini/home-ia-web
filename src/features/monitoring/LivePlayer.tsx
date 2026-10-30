@@ -16,6 +16,12 @@ export const PLAYER_BUFFER_LIMITS = {
   maxBufferSize: 48_000_000,
 } as const;
 
+export function selectPlaybackMode(hlsJsSupported: boolean, nativeHlsSupported: boolean) {
+  if (nativeHlsSupported) return 'native';
+  if (hlsJsSupported) return 'hls.js';
+  return 'unsupported';
+}
+
 function availability(status: string, t: ReturnType<typeof useI18n>['t']) {
   const labels = {
     starting: ['player.availability.starting', 'pending'],
@@ -62,6 +68,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const urlRef = useRef<string | undefined>(undefined);
   const playerInitializedRef = useRef(false);
   const wasPlayingRef = useRef(false);
+  const pendingLiveSyncRef = useRef(false);
   const lastCaptureStatus = useRef<string | undefined>(undefined);
   const [playerStatus, setPlayerStatus] = useState(t('player.status.notStarted'));
   const [playerState, setPlayerState] = useState<'healthy' | 'pending' | 'degraded' | 'failed'>('pending');
@@ -69,8 +76,8 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(1);
-  const [{ position, length, live }, setPlayback] = useState({ position: 0, length: 0, live: true });
-  const playbackRef = useRef({ position: 0, length: 0, live: true });
+  const [{ position, length, live }, setPlayback] = useState({ position: 0, length: 0, live: false });
+  const playbackRef = useRef({ position: 0, length: 0, live: false });
 
   useEffect(() => onStatusChange(playerStatus), [onStatusChange, playerStatus]);
 
@@ -96,6 +103,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
       (oldEpoch !== camera.streamEpoch || returnedToCapture);
     const resume = restart && wasPlayingRef.current && !video.ended;
     const shouldAutoplay = !playerInitializedRef.current || resume;
+    pendingLiveSyncRef.current = false;
     hlsRef.current?.destroy();
     hlsRef.current = undefined;
     video.pause();
@@ -111,7 +119,6 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     let cancelled = false;
     let loadedMetadataHandler: (() => void) | undefined;
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = camera.liveUrl;
       if (shouldAutoplay) {
         loadedMetadataHandler = () => {
           const range = seekRange(video);
@@ -120,11 +127,12 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
         };
         video.addEventListener('loadedmetadata', loadedMetadataHandler, { once: true });
       }
+      video.src = camera.liveUrl;
     } else {
       void import('hls.js')
         .then(({ default: HlsRuntime }) => {
           if (cancelled) return;
-          if (!HlsRuntime.isSupported()) {
+          if (selectPlaybackMode(HlsRuntime.isSupported(), false) === 'unsupported') {
             setPlayerState('failed');
             setPlayerStatus(translateRef.current('player.status.unsupported'));
             setMessage(translateRef.current('player.message.unsupported'));
@@ -213,13 +221,32 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     setPlayback(next);
   }
 
+  function completePendingLiveSync() {
+    if (!pendingLiveSyncRef.current) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const range = seekRange(video);
+    const hlsTarget = hlsRef.current?.liveSyncPosition;
+    const target = Number.isFinite(hlsTarget) ? hlsTarget : range ? range.end - 0.5 : undefined;
+    if (!Number.isFinite(target)) return;
+    pendingLiveSyncRef.current = false;
+    video.currentTime = target as number;
+    setPlayerStatus(t('player.status.liveSync'));
+  }
+
   async function syncLive() {
     const video = videoRef.current;
     if (!video) return;
     const range = seekRange(video);
     const target = hlsRef.current?.liveSyncPosition ?? (range ? range.end - 0.5 : undefined);
     if (!Number.isFinite(target)) {
-      setMessage(t('player.message.liveUnavailable'));
+      pendingLiveSyncRef.current = true;
+      setMessage(t('player.message.liveWaiting'));
+      try {
+        await video.play();
+      } catch {
+        setMessage(t('player.message.autoplayBlocked'));
+      }
       return;
     }
     video.currentTime = target as number;
@@ -301,10 +328,23 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
               setPlayerState('degraded');
               setPlayerStatus(t('player.status.buffering'));
             }}
-            onTimeUpdate={updateTime}
-            onProgress={updateTime}
-            onLoadedMetadata={updateTime}
-            onDurationChange={updateTime}
+            onTimeUpdate={() => {
+              completePendingLiveSync();
+              updateTime();
+            }}
+            onProgress={() => {
+              completePendingLiveSync();
+              updateTime();
+            }}
+            onLoadedMetadata={() => {
+              completePendingLiveSync();
+              updateTime();
+            }}
+            onDurationChange={() => {
+              completePendingLiveSync();
+              updateTime();
+            }}
+            onCanPlay={completePendingLiveSync}
             onVolumeChange={(event) => {
               setMuted(event.currentTarget.muted);
               setVolume(event.currentTarget.volume);

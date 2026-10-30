@@ -199,7 +199,7 @@ body {
   line-height: 1.55;
 }
 .app-shell {
-  max-width: 900px;
+  max-width: 1040px;
 }
 .brand-mark {
   display: grid;
@@ -232,6 +232,9 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: 1.125rem;
   box-shadow: 0 12px 36px #00000014;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease;
 }
 .login-panel {
   max-width: 440px;
@@ -253,6 +256,10 @@ body {
   background-color: var(--field-bg);
   border-color: var(--panel-border);
   border-radius: 0.7rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 .form-select-sm {
   min-height: 38px;
@@ -276,6 +283,21 @@ body {
   min-height: 44px;
   border-radius: 0.7rem;
   font-weight: 700;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 180ms ease,
+    transform 160ms ease;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+.btn:focus-visible {
+  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .btn-primary {
   --bs-btn-color: var(--tab-selected-text);
@@ -343,14 +365,25 @@ body {
   border-radius: 0.6rem;
   font-size: 0.82rem;
   font-weight: 700;
+  transition:
+    color 160ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 160ms ease,
+    box-shadow 180ms ease;
 }
 .view-tab[aria-selected="true"] {
   color: var(--tab-selected-text);
   background: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .view-tab:hover:not([aria-selected="true"]) {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--panel-bg) 80%, var(--accent));
+  transform: translateY(-1px);
+}
+.view-tab:active {
+  transform: scale(0.98);
 }
 .view-tab:focus-visible,
 [role="tabpanel"]:focus-visible {
@@ -438,6 +471,9 @@ body {
   background: #ff8275;
   border-radius: 50%;
 }
+.live-indicator span {
+  animation: live-pulse 1.8s ease-out infinite;
+}
 .player-frame {
   position: relative;
   overflow: hidden;
@@ -505,10 +541,25 @@ body {
   border-radius: 0.65rem;
   font-size: 0.78rem;
   font-weight: 750;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 180ms ease,
+    transform 160ms ease;
 }
 .btn-player:hover:not(:disabled),
 .btn-player:focus-visible {
   background: color-mix(in srgb, var(--toolbar-button) 70%, var(--accent));
+}
+.btn-player:hover:not(:disabled),
+.btn-live-sync:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px #00000024;
+}
+.btn-player:active:not(:disabled),
+.btn-live-sync:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .btn-player-icon {
   min-width: 44px;
@@ -588,6 +639,14 @@ body {
 }
 .health-card {
   min-height: 142px;
+}
+.health-card,
+.metric-card,
+.detail-item {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 .health-detail {
   color: var(--text-primary);
@@ -728,6 +787,13 @@ body {
   border-radius: 0.75rem;
   cursor: pointer;
   list-style: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.theme-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-border));
 }
 .theme-trigger::-webkit-details-marker {
   display: none;
@@ -808,9 +874,17 @@ body {
   border-radius: 0.7rem;
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 .theme-option:hover {
   background: color-mix(in srgb, var(--accent) 9%, var(--app-bg));
+  transform: translateY(-1px);
+}
+.theme-option:active {
+  transform: scale(0.98);
 }
 .theme-option.selected {
   background: color-mix(in srgb, var(--accent) 12%, var(--panel-bg));
@@ -861,6 +935,40 @@ body {
 .theme-option-check {
   color: var(--accent-strong);
   font-weight: 800;
+}
+@keyframes ui-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, #ff8275 48%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.42rem transparent;
+  }
+}
+.login-panel,
+.user-landing,
+.view-tabs,
+[role="tabpanel"]:not([hidden]) {
+  animation: ui-enter 360ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .health-card:hover,
+  .metric-card:hover,
+  .detail-item:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--panel-border));
+    box-shadow: 0 12px 28px #00000020;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .theme-trigger-chevron {
@@ -934,12 +1042,42 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  * {
     scroll-behavior: auto;
+  }
+  .login-panel,
+  .user-landing,
+  .view-tabs,
+  [role="tabpanel"]:not([hidden]),
+  .live-indicator span {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+  .btn,
+  .view-tab,
+  .btn-player,
+  .btn-live-sync,
+  .theme-trigger,
+  .theme-option,
+  .health-card,
+  .metric-card,
+  .detail-item {
     transition-duration: 0.01ms;
+  }
+  .btn:hover:not(:disabled),
+  .btn:active:not(:disabled),
+  .view-tab:hover:not([aria-selected="true"]),
+  .view-tab:active,
+  .btn-player:hover:not(:disabled),
+  .btn-player:active:not(:disabled),
+  .btn-live-sync:hover:not(:disabled),
+  .btn-live-sync:active:not(:disabled),
+  .theme-option:hover,
+  .theme-option:active,
+  .health-card:hover,
+  .metric-card:hover,
+  .detail-item:hover,
+  .theme-selector[open] .theme-trigger-chevron {
+    transform: none;
   }
 }

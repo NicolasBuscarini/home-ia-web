@@ -174,6 +174,8 @@ const enUS = {
   'player.message.loadFailed': 'Could not load the local HLS player.',
   'player.message.liveUnavailable':
     'The live point is not available yet. Wait for the playlist and try again.',
+  'player.message.liveWaiting':
+    'Waiting for live media; playback will move to the latest point when available.',
   'player.message.liveSelected': 'Live point selected. Press play to continue.',
   'player.message.playFailed': 'Could not start playback. Try again.',
   'player.message.fullscreenUnsupported': 'Fullscreen is not supported in this browser.',
@@ -390,6 +392,8 @@ const ptBR: Record<TranslationKey, string> = {
   'player.message.loadFailed': 'Não foi possível carregar o player HLS local.',
   'player.message.liveUnavailable':
     'O ponto ao vivo ainda não está disponível; aguarde a playlist e tente novamente.',
+  'player.message.liveWaiting':
+    'Aguardando vídeo ao vivo; a reprodução irá para o ponto mais recente assim que estiver disponível.',
   'player.message.liveSelected': 'Ponto ao vivo selecionado. Pressione reproduzir para continuar.',
   'player.message.playFailed': 'Não foi possível iniciar a reprodução. Tente novamente.',
   'player.message.fullscreenUnsupported': 'Tela cheia não é suportada neste navegador.',
