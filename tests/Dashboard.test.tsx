@@ -35,7 +35,7 @@ describe('dashboard navigation', () => {
   it('exposes only monitoring to Viewer', () => {
     renderDashboard('Viewer');
     const menu = screen.getByRole('navigation', { name: 'Navegação principal' });
-    expect(within(menu).getAllByRole('button')).toHaveLength(1);
+    expect(within(menu).getAllByRole('button')).toHaveLength(2);
     expect(within(menu).getByRole('button', { name: 'Monitoramento' })).toHaveAttribute(
       'aria-current',
       'page',
@@ -63,7 +63,7 @@ describe('dashboard navigation', () => {
     });
     renderDashboard('Administrator');
     const menu = screen.getByRole('navigation', { name: 'Navegação principal' });
-    expect(within(menu).getAllByRole('button')).toHaveLength(3);
+    expect(within(menu).getAllByRole('button')).toHaveLength(4);
     const system = within(menu).getByRole('button', { name: 'Sistema' });
     await userEvent.setup().click(system);
     expect(system).toHaveAttribute('aria-expanded', 'true');
@@ -128,5 +128,55 @@ describe('dashboard navigation', () => {
     renderDashboard('Viewer', [], undefined);
     expect(screen.getByRole('status')).toHaveTextContent('Nenhuma câmera disponível');
     expect(screen.queryByLabelText('Vídeo ao vivo da câmera')).not.toBeInTheDocument();
+  });
+
+  it('loads a chronological clip page and authorized detail/playback on demand', async () => {
+    const clip = {
+      clipId: '0123456789abcdef0123456789abcdef',
+      cameraId: 'garage-01',
+      startedAtUtc: '2026-10-31T10:00:00Z',
+      endedAtUtc: '2026-10-31T10:00:30Z',
+      state: 'ready',
+      archiveStatus: 'not_requested',
+      analysisStatus: 'not_requested',
+      thumbnailUrl: null,
+      sizeBytes: 20,
+      triggerReason: 'visual_change:segment',
+      triggerConfigVersion: 'trigger-v1',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/clips?'))
+        return new Response(JSON.stringify({ items: [clip], page: 1, pageSize: 20, total: 1 }), {
+          status: 200,
+        });
+      if (path === `/api/v1/clips/${clip.clipId}`)
+        return new Response(
+          JSON.stringify({
+            clip,
+            mediaUrl: `/api/v1/clips/${clip.clipId}/media`,
+            mediaSha256: 'a'.repeat(64),
+            thumbnailSha256: null,
+            segmentIds: ['source'],
+            attemptCount: 1,
+            updatedAtUtc: clip.endedAtUtc,
+          }),
+          { status: 200 },
+        );
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderDashboard('Viewer');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Clipes' }));
+    expect(await screen.findByText('Linha do tempo de clipes')).toBeInTheDocument();
+    expect(await screen.findByText(/garage-01 · Pronto · Não arquivado/)).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Detalhes e reprodução' }));
+    expect(await screen.findByRole('heading', { name: 'Detalhes do clipe' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Data inicial (UTC)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Data final (UTC)')).toBeInTheDocument();
+    expect(screen.getByText('visual_change:segment')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/clips?page=1&pageSize=20&cameraId=garage-01`,
+      expect.anything(),
+    );
   });
 });

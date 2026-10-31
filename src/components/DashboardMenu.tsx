@@ -4,6 +4,7 @@ import type { TranslationKey } from '../i18n/messages';
 
 export type DashboardView =
   | 'monitor'
+  | 'clips'
   | 'health'
   | 'dependencies'
   | 'capture'
@@ -14,6 +15,7 @@ type MenuGroup = 'system' | 'management';
 
 const viewLabels: Record<DashboardView, TranslationKey> = {
   monitor: 'dashboard.menu.monitor',
+  clips: 'dashboard.menu.clips',
   health: 'dashboard.menu.health',
   dependencies: 'dashboard.menu.dependencies',
   capture: 'dashboard.menu.capture',
@@ -68,6 +70,16 @@ export function DashboardMenu({ active, isAdmin, onChange }: DashboardMenuProps)
         onClick={() => choose('monitor')}
       >
         {t('dashboard.menu.monitor')}
+      </button>
+      <button
+        className="view-tab"
+        type="button"
+        id="tab-clips"
+        aria-controls="view-clips"
+        aria-current={active === 'clips' ? 'page' : undefined}
+        onClick={() => choose('clips')}
+      >
+        {t('dashboard.menu.clips')}
       </button>
       {isAdmin && (
         <>

@@ -7,6 +7,7 @@ import type { TranslationKey } from '../../i18n/messages';
 import { AdminAccessRequestsPanel } from '../admin/AdminAccessRequestsPanel';
 import { AdminProfilesPanel } from '../admin/AdminProfilesPanel';
 import { AdminUsersPanel } from '../admin/AdminUsersPanel';
+import { ClipsPanel } from '../clips/ClipsPanel';
 import { OperationsPanel } from '../operations/OperationsPanel';
 import { LivePlayer } from './LivePlayer';
 
@@ -126,6 +127,11 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
           </section>
         )}
       </section>
+      {active === 'clips' && (
+        <section id="view-clips" aria-label={t('dashboard.menu.clips')}>
+          <ClipsPanel cameraId={camera?.cameraId} />
+        </section>
+      )}
       {isAdmin && camera && (active === 'health' || active === 'dependencies' || active === 'capture') && (
         <section id={`view-${active}`} aria-label={t(systemViewLabels[active] ?? 'dashboard.menu.system')}>
           <OperationsPanel camera={camera} view={active} playerStatus={playerStatus} />
