@@ -70,6 +70,7 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [userIdFilter, setUserIdFilter] = useState(initialUserId);
+  const [userNameFilter, setUserNameFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string>();
   const [detail, setDetail] = useState<UserDetails>();
   const [assignments, setAssignments] = useState<DraftAssignment[]>([]);
@@ -231,6 +232,9 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
   }
 
   const totalPages = page ? Math.max(1, Math.ceil(page.totalCount / page.pageSize)) : 1;
+  const normalizedQuery = userNameFilter.trim().toLocaleLowerCase();
+  const visibleUsers =
+    page?.items.filter((user) => user.userName.toLocaleLowerCase().includes(normalizedQuery)) ?? [];
   return (
     <section className="panel-card admin-users-panel" aria-labelledby="admin-users-title">
       <div className="admin-users-heading">
@@ -264,6 +268,43 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
         </div>
       )}
 
+      <search className="filter-bar" aria-label={t('admin.users.filterRegion')}>
+        <div className="filter-field">
+          <label className="form-label" htmlFor="admin-users-filter">
+            {t('admin.users.filter')}
+          </label>
+          <input
+            id="admin-users-filter"
+            className="form-control"
+            type="search"
+            value={userNameFilter}
+            placeholder={t('admin.users.filterPlaceholder')}
+            aria-describedby="admin-users-filter-hint"
+            onChange={(event) => setUserNameFilter(event.currentTarget.value)}
+          />
+        </div>
+        {normalizedQuery && (
+          <>
+            <p className="filter-count mb-0" role="status" aria-live="polite">
+              {t('admin.users.filterCount', {
+                shown: visibleUsers.length,
+                total: page?.items.length ?? 0,
+              })}
+            </p>
+            <button
+              className="btn btn-outline-light btn-sm"
+              type="button"
+              onClick={() => setUserNameFilter('')}
+            >
+              {t('admin.users.clearSearch')}
+            </button>
+          </>
+        )}
+      </search>
+      <p id="admin-users-filter-hint" className="filter-hint small text-secondary">
+        {t('admin.users.filterHint')}
+      </p>
+
       {loading && (
         <p role="status" aria-live="polite">
           {t('admin.users.loading')}
@@ -293,9 +334,14 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
           {t('admin.users.empty')}
         </p>
       )}
-      {page && page.items.length > 0 && (
+      {!loading && (page?.items.length ?? 0) > 0 && visibleUsers.length === 0 && (
+        <p className="small text-secondary" role="status">
+          {t('admin.users.noFilterMatches', { query: userNameFilter.trim() })}
+        </p>
+      )}
+      {page && visibleUsers.length > 0 && (
         <div className="admin-user-list">
-          {page.items.map((user) => {
+          {visibleUsers.map((user) => {
             const expanded = expandedId === user.id;
             return (
               <article className="admin-user-card" key={user.id}>

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/i18n';
 import { ApiError, getJson, request } from '../../services/http';
+import { PERMISSION_GROUPS, permissionDescription, permissionName } from './permissionCatalog';
 
 interface Profile {
   id: string;
@@ -100,6 +101,35 @@ export function AdminProfilesPanel() {
 
   const editing = profiles.find((profile) => profile.id === editingProfileId);
 
+  const groupedPermissions = useMemo(() => {
+    const assigned = new Set<string>();
+    const groups = PERMISSION_GROUPS.map((group) => {
+      const items = permissions.filter((permission) => group.keys.includes(permission.key));
+      for (const item of items) assigned.add(item.key);
+      return { ...group, items };
+    }).filter((group) => group.items.length > 0);
+    const remaining = permissions.filter((permission) => !assigned.has(permission.key));
+    if (remaining.length > 0) {
+      groups.push({
+        id: 'other',
+        label: 'admin.profiles.group.other',
+        keys: [],
+        items: remaining,
+      });
+    }
+    return groups;
+  }, [permissions]);
+
+  function permissionLabel(key: string, fallback: string) {
+    const name = permissionName(key);
+    return name ? t(name) : fallback;
+  }
+
+  function permissionHelp(key: string, fallback: string) {
+    const description = permissionDescription(key);
+    return description ? t(description) : fallback;
+  }
+
   return (
     <section className="panel-card admin-profiles-panel" aria-labelledby="admin-profiles-title">
       <div className="admin-users-heading">
@@ -133,91 +163,148 @@ export function AdminProfilesPanel() {
         </p>
       )}
 
-      <fieldset className="admin-fieldset mt-3">
+      <fieldset className="admin-fieldset admin-profile-editor mt-3">
         <legend>{t('admin.profiles.editor')}</legend>
-        <label className="form-label" htmlFor="access-profile-name">
-          {t('admin.profiles.name')}
-        </label>
-        <input
-          id="access-profile-name"
-          className="form-control"
-          value={profileName}
-          onChange={(event) => setProfileName(event.currentTarget.value)}
-          disabled={busy || !!editingProfileId}
-          placeholder={t('admin.profiles.namePlaceholder')}
-        />
-        <label className="form-label mt-2" htmlFor="access-profile-edit">
-          {t('admin.profiles.editExisting')}
-        </label>
-        <select
-          id="access-profile-edit"
-          className="form-select"
-          value={editingProfileId}
-          disabled={busy}
-          onChange={(event) => {
-            const id = event.currentTarget.value;
-            const selected = profiles.find((profile) => profile.id === id);
-            setEditingProfileId(id);
-            setProfileName(selected?.name ?? '');
-            setPermissionKeys(selected?.permissionKeys ?? []);
-          }}
-        >
-          <option value="">{t('admin.profiles.newProfile')}</option>
-          {profiles.map((profile) => (
-            <option key={profile.id} value={profile.id} disabled={!profile.isActive}>
-              {profile.name} · v{profile.version}
-            </option>
-          ))}
-        </select>
+        <div className="profile-editor-fields">
+          <div>
+            <label className="form-label" htmlFor="access-profile-name">
+              {t('admin.profiles.name')}
+            </label>
+            <input
+              id="access-profile-name"
+              className="form-control"
+              value={profileName}
+              onChange={(event) => setProfileName(event.currentTarget.value)}
+              disabled={busy || !!editingProfileId}
+              placeholder={t('admin.profiles.namePlaceholder')}
+            />
+          </div>
+          <div>
+            <label className="form-label" htmlFor="access-profile-edit">
+              {t('admin.profiles.editExisting')}
+            </label>
+            <select
+              id="access-profile-edit"
+              className="form-select"
+              value={editingProfileId}
+              disabled={busy}
+              onChange={(event) => {
+                const id = event.currentTarget.value;
+                const selected = profiles.find((profile) => profile.id === id);
+                setEditingProfileId(id);
+                setProfileName(selected?.name ?? '');
+                setPermissionKeys(selected?.permissionKeys ?? []);
+              }}
+            >
+              <option value="">{t('admin.profiles.newProfile')}</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id} disabled={!profile.isActive}>
+                  {profile.name} · v{profile.version}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         {editing && (
-          <p className="small text-secondary mt-2">
+          <p className="small text-secondary mt-2 mb-0">
             {t('admin.profiles.versionNotice', { version: editing.version })}
           </p>
         )}
-        <div className="admin-role-list">
-          {permissions.map((permission) => (
-            <label className="form-check" key={permission.key}>
-              <input
-                className="form-check-input"
-                type="checkbox"
-                checked={permissionKeys.includes(permission.key)}
-                disabled={busy}
-                onChange={(event) =>
-                  setPermissionKeys((current) =>
-                    event.target.checked
-                      ? [...current, permission.key]
-                      : current.filter((key) => key !== permission.key),
-                  )
-                }
-              />
-              <span className="form-check-label">
-                <strong>{permission.key}</strong> — {permission.description}
-              </span>
-            </label>
-          ))}
+
+        <div className="profile-selection-summary">
+          <p className="small text-secondary mb-0" role="status" aria-live="polite">
+            {t('admin.profiles.selectedCount', {
+              selected: permissionKeys.length,
+              total: permissions.length,
+            })}
+          </p>
+          {permissionKeys.length > 0 && (
+            <button
+              className="btn btn-link btn-sm"
+              type="button"
+              disabled={busy}
+              onClick={() => setPermissionKeys([])}
+            >
+              {t('admin.profiles.clearSelection')}
+            </button>
+          )}
         </div>
-        <button
-          className="btn btn-primary btn-sm mt-2"
-          type="button"
-          onClick={() => void saveProfile()}
-          disabled={busy || (!editingProfileId && !profileName.trim())}
-        >
-          {editingProfileId ? t('admin.profiles.publishVersion') : t('admin.profiles.create')}
-        </button>
-        {editingProfileId && (
+
+        <div className="permission-groups">
+          {permissions.length === 0 && (
+            <p className="small text-secondary mb-0">{t('admin.profiles.noPermissions')}</p>
+          )}
+          {groupedPermissions.map((group) => {
+            const selectedInGroup = group.items.filter((permission) =>
+              permissionKeys.includes(permission.key),
+            ).length;
+            return (
+              <fieldset className="permission-group" key={group.id}>
+                <legend>
+                  <span>{t(group.label)}</span>
+                  <span className="permission-group-count" aria-hidden="true">
+                    {selectedInGroup}/{group.items.length}
+                  </span>
+                </legend>
+                <div className="permission-options">
+                  {group.items.map((permission) => {
+                    const checked = permissionKeys.includes(permission.key);
+                    return (
+                      <label
+                        className={`permission-option${checked ? ' is-selected' : ''}`}
+                        key={permission.key}
+                      >
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={checked}
+                          disabled={busy}
+                          onChange={(event) =>
+                            setPermissionKeys((current) =>
+                              event.target.checked
+                                ? [...current, permission.key]
+                                : current.filter((key) => key !== permission.key),
+                            )
+                          }
+                        />
+                        <span className="permission-option-copy">
+                          <strong>{permissionLabel(permission.key, permission.description)}</strong>
+                          <span>{permissionHelp(permission.key, permission.description)}</span>
+                          <code>{permission.key}</code>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            );
+          })}
+        </div>
+
+        <div className="profile-editor-actions">
           <button
-            className="btn btn-outline-light btn-sm mt-2 ms-2"
+            className="btn btn-primary btn-sm"
             type="button"
-            disabled={busy}
-            onClick={() => {
-              setEditingProfileId('');
-              setProfileName('');
-              setPermissionKeys([]);
-            }}
+            onClick={() => void saveProfile()}
+            disabled={busy || (!editingProfileId && !profileName.trim())}
           >
-            {t('admin.profiles.cancelEdit')}
+            {editingProfileId ? t('admin.profiles.publishVersion') : t('admin.profiles.create')}
           </button>
-        )}
+          {editingProfileId && (
+            <button
+              className="btn btn-outline-light btn-sm"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setEditingProfileId('');
+                setProfileName('');
+                setPermissionKeys([]);
+              }}
+            >
+              {t('admin.profiles.cancelEdit')}
+            </button>
+          )}
+        </div>
       </fieldset>
 
       <section className="mt-4" aria-labelledby="admin-profile-list-title">
@@ -256,11 +343,12 @@ export function AdminProfilesPanel() {
                   </button>
                 )}
               </div>
-              <p className="small text-secondary mb-1">{t('admin.profiles.permissions')}</p>
+              <p className="small text-secondary mb-1 mt-3">{t('admin.profiles.permissions')}</p>
               {profile.permissionKeys.length > 0 ? (
-                <ul className="admin-profile-permissions">
+                <ul className="profile-permission-tags">
                   {profile.permissionKeys.map((key) => (
-                    <li key={key}>
+                    <li className="permission-tag" key={key}>
+                      <span>{permissionLabel(key, key)}</span>
                       <code>{key}</code>
                     </li>
                   ))}

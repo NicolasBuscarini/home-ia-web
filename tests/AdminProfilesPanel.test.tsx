@@ -53,11 +53,14 @@ describe('administrative permission profile management', () => {
       </I18nProvider>,
     );
     expect(await screen.findByRole('heading', { name: 'Perfis e permissões' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /Vídeo ao vivo/ })).toBeInTheDocument();
+    expect(screen.getByText('Abrir o vídeo ao vivo das câmeras no escopo.')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Nome do perfil'), 'Garage operator');
     await user.click(screen.getByRole('checkbox', { name: /live\.video\.view/ }));
     await user.click(screen.getByRole('button', { name: 'Criar perfil' }));
 
     expect(await screen.findByRole('heading', { name: 'Garage operator · v1' })).toBeInTheDocument();
+    expect(screen.getAllByText('Ver vídeo ao vivo').length).toBeGreaterThan(0);
     expect(
       await screen.findByText('Perfil salvo. As atribuições existentes dos usuários não foram alteradas.'),
     ).toBeInTheDocument();

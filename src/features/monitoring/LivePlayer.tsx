@@ -1,13 +1,82 @@
 import type Hls from 'hls.js';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
+import type { TranslationKey, TranslationValues } from '../../i18n/messages';
 import { PLAYER_BUFFER_LIMITS, selectPlaybackMode } from './playback';
 
 interface LivePlayerProps {
   camera: CameraStatus;
   onStatusChange: (status: string) => void;
+}
+
+interface PlayerText {
+  key: TranslationKey;
+  values?: TranslationValues;
+}
+
+type PlayerIconName = 'play' | 'pause' | 'volume' | 'muted' | 'fullscreen' | 'exitFullscreen';
+
+function PlayerIcon({ name }: { name: PlayerIconName }) {
+  if (name === 'play') {
+    return (
+      <svg className="player-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8 5v14l11-7z" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (name === 'pause') {
+    return (
+      <svg className="player-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8 5v14M16 5v14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === 'volume') {
+    return (
+      <svg className="player-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
+        <path
+          d="M16.5 8.5a5 5 0 0 1 0 7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (name === 'muted') {
+    return (
+      <svg className="player-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
+        <path
+          d="m16 9 5 6M21 9l-5 6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg className="player-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d={
+          name === 'fullscreen'
+            ? 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'
+            : 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5'
+        }
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function availability(status: string, t: ReturnType<typeof useI18n>['t']) {
@@ -49,8 +118,6 @@ function clock(seconds: number) {
 
 export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const { t } = useI18n();
-  const translateRef = useRef(t);
-  translateRef.current = t;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | undefined>(undefined);
   const urlRef = useRef<string | undefined>(undefined);
@@ -59,17 +126,29 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
   const wasPlayingRef = useRef(false);
   const pendingLiveSyncRef = useRef(false);
   const lastCaptureStatus = useRef<string | undefined>(undefined);
-  const [playerStatus, setPlayerStatus] = useState(t('player.status.notStarted'));
+  const [status, setStatus] = useState<PlayerText>({ key: 'player.status.notStarted' });
   const [playerState, setPlayerState] = useState<'healthy' | 'pending' | 'degraded' | 'failed'>('pending');
-  const [message, setMessage] = useState(t('player.message.controls'));
+  const [message, setMessage] = useState<PlayerText>({ key: 'player.message.controls' });
   const [playing, setPlaying] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(1);
   const [{ position, length, live }, setPlayback] = useState({ position: 0, length: 0, live: false });
   const playbackRef = useRef({ position: 0, length: 0, live: false });
+  const statusText = t(status.key, status.values);
+  const messageText = t(message.key, message.values);
 
-  useEffect(() => onStatusChange(playerStatus), [onStatusChange, playerStatus]);
+  const publishStatus = useCallback(
+    (next: PlayerText) => setStatus({ key: next.key, values: next.values }),
+    [],
+  );
+  const publishMessage = useCallback(
+    (next: PlayerText) => setMessage({ key: next.key, values: next.values }),
+    [],
+  );
+
+  useEffect(() => onStatusChange(statusText), [onStatusChange, statusText]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -111,20 +190,20 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     if (camera.status !== 'capturing') return;
 
     setPlayerState('pending');
-    setPlayerStatus(translateRef.current('player.status.preparing'));
+    publishStatus({ key: 'player.status.preparing' });
     let cancelled = false;
     let mediaReadyHandler: (() => void) | undefined;
     mediaReadyHandler = () => {
       video.dataset.playerInitState = 'media-ready';
       setMediaReady(true);
       setPlayerState('healthy');
-      setPlayerStatus(translateRef.current('player.status.playlistReceived'));
+      publishStatus({ key: 'player.status.playlistReceived' });
       if (!shouldAutoplay) return;
       const range = seekRange(video);
       const hlsTarget = hlsRef.current?.liveSyncPosition;
       const target = Number.isFinite(hlsTarget) ? hlsTarget : range ? range.end - 0.5 : undefined;
       if (Number.isFinite(target)) video.currentTime = target as number;
-      void video.play().catch(() => setMessage(translateRef.current('player.message.autoplayBlocked')));
+      void video.play().catch(() => publishMessage({ key: 'player.message.autoplayBlocked' }));
     };
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.dataset.playerInitState = 'native-source';
@@ -143,8 +222,8 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
           if (selectPlaybackMode(supported, false) === 'unsupported') {
             video.dataset.playerInitState = 'hlsjs-unsupported';
             setPlayerState('failed');
-            setPlayerStatus(translateRef.current('player.status.unsupported'));
-            setMessage(translateRef.current('player.message.unsupported'));
+            publishStatus({ key: 'player.status.unsupported' });
+            publishMessage({ key: 'player.message.unsupported' });
             return;
           }
           const hls = new HlsRuntime({
@@ -162,26 +241,22 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
           });
           hls.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
             video.dataset.playerInitState = 'hlsjs-manifest-parsed';
-            setPlayerStatus(translateRef.current('player.status.playlistReceived'));
+            publishStatus({ key: 'player.status.playlistReceived' });
           });
           hls.on(HlsRuntime.Events.ERROR, (_event, data) => {
             if (!data.fatal) return;
             const network = data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR;
             video.dataset.playerInitState = network ? 'hlsjs-fatal-network' : 'hlsjs-fatal-media';
             setPlayerState('failed');
-            setPlayerStatus(
-              network
-                ? translateRef.current('player.status.networkError')
-                : translateRef.current('player.status.decodeError'),
-            );
+            publishStatus({
+              key: network ? 'player.status.networkError' : 'player.status.decodeError',
+            });
             const code = data.response?.code;
             const responseCode = code && code > 0 ? ` HTTP ${code}` : '';
-            setMessage(
-              translateRef.current('player.message.hlsError', {
-                details: data.details,
-                status: responseCode,
-              }),
-            );
+            publishMessage({
+              key: 'player.message.hlsError',
+              values: { details: data.details, status: responseCode },
+            });
             if (network) hls.startLoad();
             else hls.recoverMediaError();
           });
@@ -197,8 +272,8 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
             sourceSetupActiveRef.current = false;
             video.dataset.playerInitState = 'hlsjs-init-failed';
             setPlayerState('failed');
-            setPlayerStatus(translateRef.current('player.status.unavailable'));
-            setMessage(translateRef.current('player.message.loadFailed'));
+            publishStatus({ key: 'player.status.unavailable' });
+            publishMessage({ key: 'player.message.loadFailed' });
           }
         });
     }
@@ -209,7 +284,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
       hlsRef.current?.destroy();
       hlsRef.current = undefined;
     };
-  }, [camera.cameraId, camera.liveUrl, camera.status, camera.streamEpoch]);
+  }, [camera.cameraId, camera.liveUrl, camera.status, camera.streamEpoch, publishMessage, publishStatus]);
 
   useEffect(
     () => () => {
@@ -217,6 +292,12 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     },
     [],
   );
+
+  useEffect(() => {
+    const sync = () => setFullscreenActive(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
 
   function updateTime() {
     const video = videoRef.current;
@@ -246,7 +327,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     if (!Number.isFinite(target)) return;
     pendingLiveSyncRef.current = false;
     video.currentTime = target as number;
-    setPlayerStatus(t('player.status.liveSync'));
+    publishStatus({ key: 'player.status.liveSync' });
   }
 
   async function syncLive() {
@@ -256,21 +337,21 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     const target = hlsRef.current?.liveSyncPosition ?? (range ? range.end - 0.5 : undefined);
     if (!Number.isFinite(target)) {
       pendingLiveSyncRef.current = true;
-      setMessage(t('player.message.liveWaiting'));
+      publishMessage({ key: 'player.message.liveWaiting' });
       try {
         await video.play();
       } catch {
-        setMessage(t('player.message.autoplayBlocked'));
+        publishMessage({ key: 'player.message.autoplayBlocked' });
       }
       return;
     }
     video.currentTime = target as number;
     wasPlayingRef.current = true;
-    setPlayerStatus(t('player.status.liveSync'));
+    publishStatus({ key: 'player.status.liveSync' });
     try {
       await video.play();
     } catch {
-      setMessage(t('player.message.liveSelected'));
+      publishMessage({ key: 'player.message.liveSelected' });
     }
   }
 
@@ -287,13 +368,14 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
       } catch (failure) {
         wasPlayingRef.current = false;
         const reason = failure instanceof DOMException ? failure.name : '';
-        setMessage(
-          reason === 'NotAllowedError'
-            ? t('player.message.autoplayBlocked')
-            : reason === 'NotSupportedError'
-              ? t('player.message.unsupported')
-              : t('player.message.playFailed'),
-        );
+        publishMessage({
+          key:
+            reason === 'NotAllowedError'
+              ? 'player.message.autoplayBlocked'
+              : reason === 'NotSupportedError'
+                ? 'player.message.unsupported'
+                : 'player.message.playFailed',
+        });
       }
     }
   }
@@ -303,9 +385,9 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else if (shell instanceof HTMLElement && shell.requestFullscreen) await shell.requestFullscreen();
-      else setMessage(t('player.message.fullscreenUnsupported'));
+      else publishMessage({ key: 'player.message.fullscreenUnsupported' });
     } catch {
-      setMessage(t('player.message.fullscreenFailed'));
+      publishMessage({ key: 'player.message.fullscreenFailed' });
     }
   }
 
@@ -340,15 +422,15 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
               setPlaying(true);
               wasPlayingRef.current = true;
               setPlayerState('healthy');
-              setPlayerStatus(t('player.status.playing'));
-              setMessage(t('player.message.active'));
+              publishStatus({ key: 'player.status.playing' });
+              publishMessage({ key: 'player.message.active' });
             }}
             onPause={() => {
               setPlaying(false);
             }}
             onWaiting={() => {
               setPlayerState('degraded');
-              setPlayerStatus(t('player.status.buffering'));
+              publishStatus({ key: 'player.status.buffering' });
             }}
             onTimeUpdate={() => {
               completePendingLiveSync();
@@ -373,7 +455,7 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
             }}
             onError={() => {
               setPlayerState('failed');
-              setPlayerStatus(t('player.status.mediaUnavailable'));
+              publishStatus({ key: 'player.status.mediaUnavailable' });
             }}
           />
           {warning && (
@@ -389,126 +471,138 @@ export function LivePlayer({ camera, onStatusChange }: LivePlayerProps) {
         </div>
         <fieldset className="player-toolbar">
           <legend className="visually-hidden">{t('player.aria.controls')}</legend>
-          <button
-            className="btn-player"
-            type="button"
-            onClick={() => void togglePlayback()}
-            disabled={!canStartPlayback}
-            aria-label={playing ? t('player.button.pause') : t('player.button.play')}
-          >
-            {playing ? t('player.button.pauseShort') : t('player.button.playShort')}
-          </button>
-          <button
-            className="btn-player btn-player-icon"
-            type="button"
-            onClick={() => {
-              const v = videoRef.current;
-              const r = v && seekRange(v);
-              if (v && r) v.currentTime = Math.max(r.start, v.currentTime - 10);
-            }}
-            disabled={!range}
-            aria-label={t('player.button.back10')}
-          >
-            −10
-          </button>
-          <button
-            className="btn-player btn-player-icon"
-            type="button"
-            onClick={() => {
-              const v = videoRef.current;
-              const r = v && seekRange(v);
-              if (v && r) v.currentTime = Math.min(r.end, v.currentTime + 10);
-            }}
-            disabled={!range}
-            aria-label={t('player.button.forward10')}
-          >
-            +10
-          </button>
-          <output className="player-time" aria-label={t('player.aria.position')}>
-            {clock(range && videoRef.current ? videoRef.current.currentTime - range.start : 0)}
-          </output>
-          <input
-            className="player-seek"
-            type="range"
-            min="0"
-            max="1000"
-            value={position}
-            aria-label={t('player.aria.timeline')}
-            disabled={!range}
-            onChange={(event) => {
-              const v = videoRef.current;
-              const r = v && seekRange(v);
-              if (v && r)
-                v.currentTime = r.start + (Number(event.currentTarget.value) / 1000) * (r.end - r.start);
-            }}
-          />
-          <output className="player-time" aria-label={t('player.aria.duration')}>
-            {length ? clock(length) : '—'}
-          </output>
-          <button
-            className="btn-player btn-player-icon"
-            type="button"
-            onClick={() => {
-              const v = videoRef.current;
-              if (v) {
-                if (v.muted || v.volume === 0) {
-                  v.muted = false;
-                  if (v.volume === 0) v.volume = 1;
-                } else v.muted = true;
+          <fieldset className="player-toolbar-group">
+            <legend className="visually-hidden">{t('player.aria.transport')}</legend>
+            <button
+              className="btn-player btn-player-primary"
+              type="button"
+              onClick={() => void togglePlayback()}
+              disabled={!canStartPlayback}
+              aria-label={playing ? t('player.button.pause') : t('player.button.play')}
+            >
+              <PlayerIcon name={playing ? 'pause' : 'play'} />
+              <span className="btn-player-label">
+                {playing ? t('player.button.pauseShort') : t('player.button.playShort')}
+              </span>
+            </button>
+            <button
+              className="btn-player btn-player-icon"
+              type="button"
+              onClick={() => {
+                const v = videoRef.current;
+                const r = v && seekRange(v);
+                if (v && r) v.currentTime = Math.max(r.start, v.currentTime - 10);
+              }}
+              disabled={!range}
+              aria-label={t('player.button.back10')}
+            >
+              <span aria-hidden="true">{t('player.button.back10Short')}</span>
+            </button>
+            <button
+              className="btn-player btn-player-icon"
+              type="button"
+              onClick={() => {
+                const v = videoRef.current;
+                const r = v && seekRange(v);
+                if (v && r) v.currentTime = Math.min(r.end, v.currentTime + 10);
+              }}
+              disabled={!range}
+              aria-label={t('player.button.forward10')}
+            >
+              <span aria-hidden="true">{t('player.button.forward10Short')}</span>
+            </button>
+          </fieldset>
+          <div className="player-toolbar-group player-toolbar-timeline">
+            <output className="player-time" aria-label={t('player.aria.position')}>
+              {clock(range && videoRef.current ? videoRef.current.currentTime - range.start : 0)}
+            </output>
+            <input
+              className="player-seek"
+              type="range"
+              min="0"
+              max="1000"
+              value={position}
+              aria-label={t('player.aria.timeline')}
+              disabled={!range}
+              onChange={(event) => {
+                const v = videoRef.current;
+                const r = v && seekRange(v);
+                if (v && r)
+                  v.currentTime = r.start + (Number(event.currentTarget.value) / 1000) * (r.end - r.start);
+              }}
+            />
+            <output className="player-time" aria-label={t('player.aria.duration')}>
+              {length ? clock(length) : '—'}
+            </output>
+          </div>
+          <fieldset className="player-toolbar-group player-toolbar-extras">
+            <legend className="visually-hidden">{t('player.aria.audioScreen')}</legend>
+            <button
+              className="btn-player btn-player-secondary"
+              type="button"
+              onClick={() => {
+                const v = videoRef.current;
+                if (v) {
+                  if (v.muted || v.volume === 0) {
+                    v.muted = false;
+                    if (v.volume === 0) v.volume = 1;
+                  } else v.muted = true;
+                }
+              }}
+              disabled={!canControl}
+              aria-label={muted ? t('player.button.unmute') : t('player.button.mute')}
+            >
+              <PlayerIcon name={muted ? 'muted' : 'volume'} />
+              <span className="btn-player-label">
+                {muted ? t('player.button.muted') : t('player.button.audio')}
+              </span>
+            </button>
+            <input
+              className="player-volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={volume}
+              aria-label={t('player.aria.volume')}
+              disabled={!canControl}
+              onChange={(event) => {
+                const v = videoRef.current;
+                if (v) {
+                  v.volume = Number(event.currentTarget.value);
+                  v.muted = v.volume === 0;
+                }
+              }}
+            />
+            <button
+              className="btn-player btn-player-icon"
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              disabled={!canControl}
+              aria-label={
+                fullscreenActive ? t('player.button.exitFullscreen') : t('player.button.enterFullscreen')
               }
-            }}
-            disabled={!canControl}
-            aria-label={muted ? t('player.button.unmute') : t('player.button.mute')}
-          >
-            {muted ? t('player.button.muted') : t('player.button.audio')}
-          </button>
-          <input
-            className="player-volume"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={volume}
-            aria-label={t('player.aria.volume')}
-            disabled={!canControl}
-            onChange={(event) => {
-              const v = videoRef.current;
-              if (v) {
-                v.volume = Number(event.currentTarget.value);
-                v.muted = v.volume === 0;
-              }
-            }}
-          />
-          <button
-            className="btn-player btn-player-icon"
-            type="button"
-            onClick={() => void toggleFullscreen()}
-            disabled={!canControl}
-            aria-label={
-              document.fullscreenElement
-                ? t('player.button.exitFullscreen')
-                : t('player.button.enterFullscreen')
-            }
-          >
-            ⛶
-          </button>
-          <button
-            className={`btn-live-sync${live ? ' is-live' : ''}`}
-            type="button"
-            onClick={() => void syncLive()}
-            disabled={!canControl}
-            aria-label={live ? t('player.button.atLive') : t('player.button.goLive')}
-          >
-            <span className="live-sync-dot" aria-hidden="true" />
-            {live ? t('player.button.live') : t('player.button.goLiveShort')}
-          </button>
+            >
+              <PlayerIcon name={fullscreenActive ? 'exitFullscreen' : 'fullscreen'} />
+            </button>
+            <button
+              className={`btn-live-sync${live ? ' is-live' : ''}`}
+              type="button"
+              onClick={() => void syncLive()}
+              disabled={!canControl}
+              aria-label={live ? t('player.button.atLive') : t('player.button.goLive')}
+            >
+              <span className="live-sync-dot" aria-hidden="true" />
+              {live ? t('player.button.live') : t('player.button.goLiveShort')}
+            </button>
+          </fieldset>
         </fieldset>
       </div>
       <div className="player-feedback">
-        <p className="small text-secondary mt-2 mb-0" role="status" aria-live="polite">
-          {message}
+        <p className="player-message mb-0" role="status" aria-live="polite">
+          {messageText}
         </p>
-        <StatusBadge label={playerStatus} state={playerState} live />
+        <StatusBadge label={statusText} state={playerState} live />
       </div>
     </section>
   );

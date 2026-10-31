@@ -33,9 +33,12 @@ interface AdminAccessRequestsPanelProps {
 }
 
 export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPanelProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [pageNumber, setPageNumber] = useState(1);
   const [page, setPage] = useState<AccessRequestPage>();
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | AccessRequestSummary['status']>('all');
+  const [purposeFilter, setPurposeFilter] = useState<'all' | AccessRequestSummary['purpose']>('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState('');
@@ -101,6 +104,22 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
   }
 
   const totalPages = page ? Math.max(1, Math.ceil(page.totalCount / page.pageSize)) : 1;
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtersActive = normalizedQuery.length > 0 || statusFilter !== 'all' || purposeFilter !== 'all';
+  const visibleRequests =
+    page?.items.filter(
+      (item) =>
+        (!normalizedQuery || item.username.toLocaleLowerCase().includes(normalizedQuery)) &&
+        (statusFilter === 'all' || item.status === statusFilter) &&
+        (purposeFilter === 'all' || item.purpose === purposeFilter),
+    ) ?? [];
+
+  function clearFilters() {
+    setQuery('');
+    setStatusFilter('all');
+    setPurposeFilter('all');
+  }
+
   return (
     <section className="panel-card" aria-labelledby="admin-access-requests-title">
       <span className="eyebrow">{t('admin.accessRequests.eyebrow')}</span>
@@ -108,6 +127,80 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
         {t('admin.accessRequests.title')}
       </h2>
       <p className="text-secondary">{t('admin.accessRequests.description')}</p>
+
+      <search className="filter-bar" aria-label={t('admin.accessRequests.filterRegion')}>
+        <div className="filter-field">
+          <label className="form-label" htmlFor="access-requests-filter">
+            {t('admin.accessRequests.filter')}
+          </label>
+          <input
+            id="access-requests-filter"
+            className="form-control"
+            type="search"
+            value={query}
+            placeholder={t('admin.accessRequests.filterPlaceholder')}
+            aria-describedby="access-requests-filter-hint"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+        </div>
+        <div className="filter-field filter-field-compact">
+          <label className="form-label" htmlFor="access-requests-status">
+            {t('admin.accessRequests.filterStatus')}
+          </label>
+          <select
+            id="access-requests-status"
+            className="form-select"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.currentTarget.value as 'all' | AccessRequestSummary['status'])
+            }
+          >
+            <option value="all">{t('admin.accessRequests.filterAllStatuses')}</option>
+            {(['pending', 'reviewed'] as const).map((status) => (
+              <option key={status} value={status}>
+                {t(statusLabels[status])}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-field filter-field-compact">
+          <label className="form-label" htmlFor="access-requests-purpose">
+            {t('admin.accessRequests.filterPurpose')}
+          </label>
+          <select
+            id="access-requests-purpose"
+            className="form-select"
+            value={purposeFilter}
+            onChange={(event) =>
+              setPurposeFilter(event.currentTarget.value as 'all' | AccessRequestSummary['purpose'])
+            }
+          >
+            <option value="all">{t('admin.accessRequests.filterAllPurposes')}</option>
+            {(['live_monitoring', 'camera_access'] as const).map((purpose) => (
+              <option key={purpose} value={purpose}>
+                {t(purposeLabels[purpose])}
+              </option>
+            ))}
+          </select>
+        </div>
+        {filtersActive && (
+          <>
+            <p className="filter-count mb-0" role="status" aria-live="polite">
+              {t('admin.accessRequests.filterCount', {
+                shown: visibleRequests.length,
+                total: page?.items.length ?? 0,
+              })}
+            </p>
+            <button className="btn btn-outline-light btn-sm" type="button" onClick={clearFilters}>
+              {t('admin.accessRequests.clearSearch')}
+            </button>
+          </>
+        )}
+      </search>
+      <p id="access-requests-filter-hint" className="filter-hint small text-secondary">
+        {t('admin.accessRequests.filterHint')}
+      </p>
+
       {error && (
         <div className="error-text" role="alert">
           <p>{error}</p>
@@ -127,40 +220,46 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
         <p role="status">{t('admin.accessRequests.empty')}</p>
       ) : (
         <>
-          <ul className="admin-grant-list">
-            {page?.items.map((item) => (
-              <li key={item.id}>
-                <div>
-                  <strong>{item.username}</strong>
-                  <p className="small mb-1">{t(purposeLabels[item.purpose])}</p>
-                  <p className="small text-secondary mb-0">
-                    {t(statusLabels[item.status])} · {new Date(item.createdAtUtc).toLocaleString()}
-                  </p>
-                </div>
-                <div className="d-flex flex-wrap gap-2">
-                  <button
-                    className="btn btn-outline-light btn-sm"
-                    type="button"
-                    onClick={() => onManageUser(item.userId)}
-                  >
-                    {t('admin.accessRequests.manageUser')}
-                  </button>
-                  {item.status === 'pending' && (
+          {visibleRequests.length === 0 ? (
+            <p className="small text-secondary" role="status">
+              {t('admin.accessRequests.noFilterMatches')}
+            </p>
+          ) : (
+            <ul className="admin-grant-list">
+              {visibleRequests.map((item) => (
+                <li key={item.id}>
+                  <div>
+                    <strong>{item.username}</strong>
+                    <p className="small mb-1">{t(purposeLabels[item.purpose])}</p>
+                    <p className="small text-secondary mb-0">
+                      {t(statusLabels[item.status])} · {new Date(item.createdAtUtc).toLocaleString(locale)}
+                    </p>
+                  </div>
+                  <div className="d-flex flex-wrap gap-2">
                     <button
                       className="btn btn-outline-light btn-sm"
                       type="button"
-                      disabled={!!busyId}
-                      onClick={() => void review(item)}
+                      onClick={() => onManageUser(item.userId)}
                     >
-                      {busyId === item.id
-                        ? t('admin.accessRequests.reviewing')
-                        : t('admin.accessRequests.review')}
+                      {t('admin.accessRequests.manageUser')}
                     </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                    {item.status === 'pending' && (
+                      <button
+                        className="btn btn-outline-light btn-sm"
+                        type="button"
+                        disabled={!!busyId}
+                        onClick={() => void review(item)}
+                      >
+                        {busyId === item.id
+                          ? t('admin.accessRequests.reviewing')
+                          : t('admin.accessRequests.review')}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           {totalPages > 1 && (
             <nav className="admin-pagination mt-3" aria-label={t('admin.accessRequests.pagination')}>
               <button

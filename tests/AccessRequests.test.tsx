@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminAccessRequestsPanel } from '../src/features/admin/AdminAccessRequestsPanel';
@@ -93,12 +93,70 @@ describe('access request screens', () => {
     await user.click(screen.getByRole('button', { name: 'Gerenciar usuário' }));
     expect(onManageUser).toHaveBeenCalledWith('user-1');
     await user.click(screen.getByRole('button', { name: 'Marcar como analisado' }));
-    expect(await screen.findByText(/Analisado/)).toBeInTheDocument();
-    expect(screen.getByText(/as permissões do usuário não foram alteradas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/as permissões do usuário não foram alteradas/i)).toBeInTheDocument();
+    expect(within(screen.getByRole('list')).getByText(/Analisado/)).toBeInTheDocument();
     expect(calls).toContain('POST /api/v1/admin/access-requests/request-1/review');
     expect(calls.filter((call) => call.startsWith('GET /api/v1/admin/access-requests?'))).toHaveLength(1);
     expect(calls.some((call) => call.includes('/access-rules') || call.includes('/access-profiles'))).toBe(
       false,
     );
+  });
+
+  it('filters the requests loaded on the page by username, status and purpose', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/admin/access-requests?')) {
+        return response({
+          items: [
+            {
+              id: 'request-1',
+              userId: 'user-1',
+              username: 'local-user',
+              purpose: 'live_monitoring',
+              status: 'pending',
+              createdAtUtc: '2026-10-30T00:00:00Z',
+            },
+            {
+              id: 'request-2',
+              userId: 'user-2',
+              username: 'garage-operator',
+              purpose: 'camera_access',
+              status: 'reviewed',
+              createdAtUtc: '2026-10-30T01:00:00Z',
+            },
+          ],
+          page: 1,
+          pageSize: 25,
+          totalCount: 2,
+        });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    const user = userEvent.setup();
+    render(
+      <I18nProvider>
+        <AdminAccessRequestsPanel onManageUser={() => {}} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('local-user')).toBeInTheDocument();
+    expect(screen.getByText('garage-operator')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Filtrar pedidos'), 'garage');
+    expect(screen.getByText('garage-operator')).toBeInTheDocument();
+    expect(screen.queryByText('local-user')).not.toBeInTheDocument();
+    expect(screen.getByText('1 de 2 pedidos nesta página')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Filtrar pedidos'));
+    await user.selectOptions(screen.getByLabelText('Estado'), 'reviewed');
+    expect(screen.getByText('garage-operator')).toBeInTheDocument();
+    expect(screen.queryByText('local-user')).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Motivo'), 'live_monitoring');
+    expect(screen.getByText('Nenhum pedido nesta página corresponde aos filtros.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+    expect(screen.getByText('local-user')).toBeInTheDocument();
+    expect(screen.getByText('garage-operator')).toBeInTheDocument();
   });
 });

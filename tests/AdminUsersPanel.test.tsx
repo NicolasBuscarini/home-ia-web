@@ -162,4 +162,43 @@ describe('administrative user management', () => {
       'As contas carregaram, mas não foi possível carregar perfis ou escopos de câmera.',
     );
   });
+
+  it('filters the accounts loaded on the page and makes the filter scope explicit', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/admin/users?page='))
+        return response({
+          items: [account, { id: 'user-2', userName: 'garage-operator', isActive: true }],
+          page: 1,
+          pageSize: 25,
+          totalCount: 2,
+        });
+      if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [] });
+      if (path === '/api/v1/admin/access-rules') return response([]);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    const user = userEvent.setup();
+    render(
+      <I18nProvider>
+        <AdminUsersPanel />
+      </I18nProvider>,
+    );
+    expect(await screen.findByRole('heading', { name: 'local-user' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'garage-operator' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Filtrar contas'), 'garage');
+    expect(screen.getByRole('heading', { name: 'garage-operator' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'local-user' })).not.toBeInTheDocument();
+    expect(screen.getByText('1 de 2 contas nesta página')).toBeInTheDocument();
+    expect(screen.getByText(/Filtra as contas carregadas nesta página/)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Filtrar contas'));
+    await user.type(screen.getByLabelText('Filtrar contas'), 'missing');
+    expect(screen.getByText('Nenhuma conta nesta página corresponde a “missing”.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Limpar filtro' }));
+    expect(screen.getByRole('heading', { name: 'local-user' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'garage-operator' })).toBeInTheDocument();
+  });
 });

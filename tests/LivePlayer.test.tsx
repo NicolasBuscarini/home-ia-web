@@ -4,7 +4,7 @@ import { Profiler, StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LivePlayer } from '../src/features/monitoring/LivePlayer';
 import { PLAYER_BUFFER_LIMITS, selectPlaybackMode } from '../src/features/monitoring/playback';
-import { I18nProvider } from '../src/i18n/i18n';
+import { I18nProvider, useI18n } from '../src/i18n/i18n';
 
 afterEach(() => cleanup());
 
@@ -16,6 +16,21 @@ const camera = {
 };
 
 const capturingCamera = { ...camera, status: 'capturing' };
+
+function LocaleSwitch() {
+  const { locale, setLocale } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const nextLocale = locale === 'en-US' ? 'pt-BR' : 'en-US';
+        setLocale(nextLocale);
+      }}
+    >
+      switch-locale
+    </button>
+  );
+}
 
 describe('live player startup and bounded updates', () => {
   it('prefers working native HLS when declared and keeps Hls.js as fallback', () => {
@@ -170,5 +185,29 @@ describe('live player startup and bounded updates', () => {
 
     expect(commitsAfterFirstVisibleUpdate).toBeGreaterThan(0);
     expect(commits).toBe(commitsAfterFirstVisibleUpdate);
+  });
+
+  it('retranslates the current player status and control groups when the locale changes', async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider>
+        <LivePlayer camera={camera} onStatusChange={() => {}} />
+        <LocaleSwitch />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('Player ainda não iniciado')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Reprodução e busca' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'switch-locale' }));
+
+    expect(screen.getByText('Player not started yet')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Playback and seeking' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Live video starts muted. Use the player controls to enable audio or pause.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'switch-locale' }));
+    expect(screen.getByText('Player ainda não iniciado')).toBeInTheDocument();
   });
 });

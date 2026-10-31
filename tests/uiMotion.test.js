@@ -46,17 +46,35 @@ describe('UI motion accessibility contract', () => {
     expect(stylesheet).toContain('calc(177.78dvh - 24.9rem)');
   });
 
-  it('layers the open theme menu above the header and bounds it on short viewports', () => {
-    expect(stylesheet).toMatch(/\.app-header \{[\s\S]*?z-index: 20;/);
-    expect(stylesheet).toContain('.theme-selector[open] {\n  z-index: 30;');
-    expect(stylesheet).toContain('.theme-menu {\n  position: absolute;\n  z-index: 40;');
+  it('layers the header and its open theme menu above the dashboard navigation', () => {
+    const headerLayer = Number(/\.app-header\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN);
+    const menuLayer = Number(
+      /\.dashboard-menu\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN,
+    );
+    expect(headerLayer).toBeGreaterThan(menuLayer);
+    expect(stylesheet).toMatch(/\.theme-selector\[open\]\s*\{[^}]*z-index:\s*\d+;/);
+    expect(stylesheet).toMatch(/\.theme-menu\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*\d+;/);
     expect(stylesheet).toContain('max-height: min(70vh, 34rem);');
     expect(stylesheet).toContain('overflow-y: auto;');
   });
 
-  it('keeps management submenus above the monitoring cards', () => {
-    expect(stylesheet).toMatch(/\.dashboard-menu\s*\{[^}]*z-index:\s*60/s);
-    expect(stylesheet).toMatch(/\.dashboard-submenu\s*\{[^}]*z-index:\s*62/s);
+  it('keeps dashboard submenus above the monitoring cards', () => {
+    const menuLayer = Number(
+      /\.dashboard-menu\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN,
+    );
+    const submenuLayer = Number(
+      /\.dashboard-submenu\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN,
+    );
+    expect(submenuLayer).toBeGreaterThan(menuLayer);
+  });
+
+  it('stacks the open theme popup over the header contents', () => {
+    const themeLayer = Number(
+      /\.theme-selector\[open\]\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN,
+    );
+    const menuLayer = Number(/\.theme-menu\s*\{[^}]*z-index:\s*(\d+)/s.exec(stylesheet)?.[1] ?? Number.NaN);
+    expect(themeLayer).toBeGreaterThan(100);
+    expect(menuLayer).toBeGreaterThan(themeLayer);
   });
 
   it('reduces animation and transition duration when requested by the OS', () => {

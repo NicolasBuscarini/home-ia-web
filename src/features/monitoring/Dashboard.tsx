@@ -27,7 +27,7 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
   const { t } = useI18n();
   const [active, setActive] = useState<DashboardView>('monitor');
   const [userIdFilter, setUserIdFilter] = useState<string>();
-  const [playerStatus, setPlayerStatus] = useState('Player ainda não iniciado');
+  const [playerStatus, setPlayerStatus] = useState(() => t('player.status.notStarted'));
   const playerAnchorRef = useRef<HTMLDivElement>(null);
   const didAutoScrollRef = useRef(false);
   const isAdmin = userRole === 'Administrator';

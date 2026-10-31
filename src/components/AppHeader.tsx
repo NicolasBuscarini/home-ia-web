@@ -59,7 +59,7 @@ export function AppHeader({
         </span>
         <div>
           <p className="eyebrow mb-1">
-            GARAGEM IA <span className="brand-separator">/</span> LOCAL
+            GARAGEM IA <span className="brand-separator">/</span> {t('app.brand.local')}
           </p>
           <h1 className="h3 mb-0">{t('app.title')}</h1>
         </div>

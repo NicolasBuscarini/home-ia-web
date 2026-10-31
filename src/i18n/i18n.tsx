@@ -51,8 +51,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
   const t = useCallback(
     (key: TranslationKey, values: TranslationValues = {}) =>
-      catalogs[localeRef.current][key].replace(/\{([^}]+)\}/g, (token, name: string) =>
-        Object.hasOwn(values, name) ? String(values[name]) : token,
+      (catalogs[localeRef.current][key] ?? catalogs['pt-BR'][key] ?? key).replace(
+        /\{([^}]+)\}/g,
+        (token, name: string) => (Object.hasOwn(values, name) ? String(values[name]) : token),
       ),
     [],
   );

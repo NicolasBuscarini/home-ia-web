@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StatusBadge } from '../../components/StatusBadge';
 import type { CameraStatus, ReadinessResponse, SystemProfile } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
+import type { TranslationKey, TranslationValues } from '../../i18n/messages';
 import { getJson, request } from '../../services/http';
 
 interface OperationsPanelProps {
@@ -11,12 +12,17 @@ interface OperationsPanelProps {
 }
 type State = 'healthy' | 'pending' | 'degraded' | 'failed' | 'neutral';
 interface HealthItem {
-  label: string;
+  key: TranslationKey;
   state: State;
+  values?: TranslationValues;
+}
+interface GatewayText {
+  key: TranslationKey;
+  values?: TranslationValues;
 }
 
-function captureState(state: string | undefined, t: ReturnType<typeof useI18n>['t']): HealthItem {
-  const labels: Record<string, [Parameters<typeof t>[0], State]> = {
+function captureState(state: string | undefined): HealthItem {
+  const labels: Record<string, [TranslationKey, State]> = {
     capturing: ['capture.state.capturing', 'healthy'],
     connecting: ['capture.state.connecting', 'pending'],
     starting: ['capture.state.starting', 'pending'],
@@ -25,9 +31,7 @@ function captureState(state: string | undefined, t: ReturnType<typeof useI18n>['
     stopped: ['capture.state.stopped', 'failed'],
   };
   const item = labels[state ?? ''];
-  return item
-    ? { label: t(item[0]), state: item[1] }
-    : { label: t('operations.state.unknown'), state: 'neutral' };
+  return item ? { key: item[0], state: item[1] } : { key: 'operations.state.unknown', state: 'neutral' };
 }
 
 function safeCaptureError(code: string | null | undefined, t: ReturnType<typeof useI18n>['t']) {
@@ -42,13 +46,21 @@ function safeCaptureError(code: string | null | undefined, t: ReturnType<typeof 
 
 export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelProps) {
   const { t, locale } = useI18n();
-  const [apiHealth, setApiHealth] = useState<HealthItem>({ label: 'Consultando', state: 'pending' });
+  const [apiHealth, setApiHealth] = useState<HealthItem>({
+    key: 'operations.state.querying',
+    state: 'pending',
+  });
   const [readiness, setReadiness] = useState<ReadinessResponse>();
   const [profile, setProfile] = useState<SystemProfile>();
-  const [gateway, setGateway] = useState<HealthItem>({ label: 'Aguardando', state: 'pending' });
-  const [gatewayDetail, setGatewayDetail] = useState(() => t('operations.gatewayChecking'));
+  const [gateway, setGateway] = useState<HealthItem>({
+    key: 'operations.state.waiting',
+    state: 'pending',
+  });
+  const [gatewayDetail, setGatewayDetail] = useState<GatewayText>({
+    key: 'operations.gatewayChecking',
+  });
   const [gatewayDependency, setGatewayDependency] = useState<HealthItem>({
-    label: 'Aguardando',
+    key: 'operations.state.waiting',
     state: 'pending',
   });
   const [updated, setUpdated] = useState('—');
@@ -71,8 +83,8 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
         if (!active) return;
         setApiHealth(
           liveResult.status === 'fulfilled'
-            ? { label: t('operations.api.operational'), state: 'healthy' }
-            : { label: t('operations.api.unavailable'), state: 'failed' },
+            ? { key: 'operations.api.operational', state: 'healthy' }
+            : { key: 'operations.api.unavailable', state: 'failed' },
         );
         if (
           readyResult.status === 'fulfilled' &&
@@ -104,33 +116,37 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
           if (!active) return;
           const body = await response.text();
           if (response.status === 401) {
-            setGateway({ label: t('operations.gateway.sessionExpired'), state: 'failed' });
-            setGatewayDependency({ label: t('operations.gateway.noSession'), state: 'failed' });
+            setGateway({ key: 'operations.gateway.sessionExpired', state: 'failed' });
+            setGatewayDependency({ key: 'operations.gateway.noSession', state: 'failed' });
           } else if (response.ok && body.startsWith('#EXTM3U')) {
-            setGateway({ label: t('operations.gateway.available'), state: 'healthy' });
-            setGatewayDetail(
-              t('operations.gateway.playlistDetail', {
-                milliseconds: Math.round(performance.now() - started),
-              }),
-            );
-            setGatewayDependency({ label: t('operations.gateway.available'), state: 'healthy' });
+            setGateway({ key: 'operations.gateway.available', state: 'healthy' });
+            setGatewayDetail({
+              key: 'operations.gateway.playlistDetail',
+              values: { milliseconds: Math.round(performance.now() - started) },
+            });
+            setGatewayDependency({ key: 'operations.gateway.available', state: 'healthy' });
           } else if (response.status === 503) {
-            setGateway({ label: t('operations.gateway.waitingSegments'), state: 'degraded' });
-            setGatewayDetail(t('operations.gateway.waitingDetail'));
-            setGatewayDependency({ label: t('operations.gateway.noSegments'), state: 'degraded' });
+            setGateway({ key: 'operations.gateway.waitingSegments', state: 'degraded' });
+            setGatewayDetail({ key: 'operations.gateway.waitingDetail' });
+            setGatewayDependency({ key: 'operations.gateway.noSegments', state: 'degraded' });
           } else {
-            setGateway({ label: t('operations.gateway.http', { status: response.status }), state: 'failed' });
-            setGatewayDetail(t('operations.gateway.unexpected'));
-            setGatewayDependency({
-              label: t('operations.gateway.http', { status: response.status }),
+            setGateway({
+              key: 'operations.gateway.http',
               state: 'failed',
+              values: { status: response.status },
+            });
+            setGatewayDetail({ key: 'operations.gateway.unexpected' });
+            setGatewayDependency({
+              key: 'operations.gateway.http',
+              state: 'failed',
+              values: { status: response.status },
             });
           }
         } catch {
           if (active) {
-            setGateway({ label: t('operations.gateway.noConnection'), state: 'failed' });
-            setGatewayDetail(t('operations.gateway.noConnectionDetail'));
-            setGatewayDependency({ label: t('operations.gateway.noConnection'), state: 'failed' });
+            setGateway({ key: 'operations.gateway.noConnection', state: 'failed' });
+            setGatewayDetail({ key: 'operations.gateway.noConnectionDetail' });
+            setGatewayDependency({ key: 'operations.gateway.noConnection', state: 'failed' });
           }
         }
         if (active) setUpdated(new Date().toLocaleTimeString(locale));
@@ -145,41 +161,17 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
       window.clearInterval(timer);
       controller.abort();
     };
-  }, [camera.liveUrl, locale, t]);
+  }, [camera.liveUrl, locale]);
 
   const capture = readiness?.capture;
-  const captureHealth = captureState(capture?.state ?? camera.status, t);
+  const captureHealth = captureState(capture?.state ?? camera.status);
   const count = capture?.spool?.segments ?? capture?.segments;
   const spoolHealth: HealthItem =
     capture?.spool?.status === 'available'
-      ? { label: 'Disponível', state: 'healthy' }
+      ? { key: 'operations.state.available', state: 'healthy' }
       : capture?.spool?.status === 'unavailable'
-        ? { label: 'Indisponível', state: 'failed' }
-        : { label: 'Sem dados', state: 'pending' };
-
-  const localizeState = (item: HealthItem): HealthItem => {
-    const labels: Record<string, string> = {
-      Consultando: 'operations.state.querying',
-      Aguardando: 'operations.state.waiting',
-      Disponível: 'operations.state.available',
-      Indisponível: 'operations.state.unavailable',
-      'Sem dados': 'operations.state.noData',
-      Operacional: 'operations.api.operational',
-      'Estado não reconhecido': 'operations.state.unknown',
-      Capturando: 'capture.state.capturing',
-      'Conectando à fonte': 'capture.state.connecting',
-      Iniciando: 'capture.state.starting',
-      Reconectando: 'capture.state.reconnecting',
-      'Spool indisponível': 'capture.state.spoolUnavailable',
-      Parado: 'capture.state.stopped',
-    };
-    return labels[item.label] ? { ...item, label: t(labels[item.label] as Parameters<typeof t>[0]) } : item;
-  };
-  const apiHealthText = localizeState(apiHealth);
-  const captureHealthText = localizeState(captureHealth);
-  const gatewayText = localizeState(gateway);
-  const gatewayDependencyText = localizeState(gatewayDependency);
-  const spoolHealthText = localizeState(spoolHealth);
+        ? { key: 'operations.state.unavailable', state: 'failed' }
+        : { key: 'operations.state.noData', state: 'pending' };
   return (
     <div className="operations-content">
       {view === 'health' && (
@@ -190,9 +182,7 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
               <h2 className="h4 mb-0">{t('operations.health.title')}</h2>
             </div>
             <span className="small text-secondary text-end" aria-live="polite">
-              {t('operations.updated', {
-                time: updated.replace(/^Atualizado /, '').replace(/^Updated /, ''),
-              })}
+              {t('operations.updated', { time: updated })}
             </span>
           </div>
           <section className="row g-3 mb-3" aria-label={t('operations.health.connections')}>
@@ -200,7 +190,7 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
               <article className="panel-card health-card h-100">
                 <div className="d-flex align-items-center justify-content-between gap-2">
                   <h3 className="h6 mb-0">{t('operations.health.api')}</h3>
-                  <StatusBadge {...apiHealthText} />
+                  <StatusBadge label={t(apiHealth.key, apiHealth.values)} state={apiHealth.state} />
                 </div>
                 <p className="health-detail mt-3 mb-1">{profile?.serviceName ?? '—'}</p>
                 <p className="small text-secondary mb-0">
@@ -217,7 +207,10 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
               <article className="panel-card health-card h-100">
                 <div className="d-flex align-items-center justify-content-between gap-2">
                   <h3 className="h6 mb-0">{t('operations.health.capture')}</h3>
-                  <StatusBadge {...captureHealthText} />
+                  <StatusBadge
+                    label={t(captureHealth.key, captureHealth.values)}
+                    state={captureHealth.state}
+                  />
                 </div>
                 <p className="health-detail mt-3 mb-1">{capture?.adapter ?? '—'}</p>
                 <p className="small text-secondary mb-0">{safeCaptureError(capture?.lastErrorCode, t)}</p>
@@ -227,9 +220,9 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
               <article className="panel-card health-card h-100">
                 <div className="d-flex align-items-center justify-content-between gap-2">
                   <h3 className="h6 mb-0">{t('operations.health.gateway')}</h3>
-                  <StatusBadge {...gatewayText} />
+                  <StatusBadge label={t(gateway.key, gateway.values)} state={gateway.state} />
                 </div>
-                <p className="health-detail mt-3 mb-1">{gatewayDetail}</p>
+                <p className="health-detail mt-3 mb-1">{t(gatewayDetail.key, gatewayDetail.values)}</p>
                 <p className="small text-secondary mb-0" role="status" aria-live="polite">
                   {playerStatus}
                 </p>
@@ -289,27 +282,27 @@ export function OperationsPanel({ camera, view, playerStatus }: OperationsPanelP
             <Dependency
               name={t('operations.dependencies.api')}
               detail={t('operations.dependencies.apiDetail')}
-              status={apiHealthText}
+              status={apiHealth}
             />
             <Dependency
               name={t('operations.dependencies.source')}
               detail={t('operations.dependencies.sourceDetail')}
-              status={captureHealthText}
+              status={captureHealth}
             />
             <Dependency
               name={t('operations.dependencies.spool')}
               detail={t('operations.dependencies.spoolDetail')}
-              status={spoolHealthText}
+              status={spoolHealth}
             />
             <Dependency
               name={t('operations.dependencies.gateway')}
               detail={t('operations.dependencies.gatewayDetail')}
-              status={gatewayDependencyText}
+              status={gatewayDependency}
             />
             <Dependency
               name={t('operations.dependencies.notConfigured')}
               detail={t('operations.dependencies.notConfiguredDetail')}
-              status={{ label: t('operations.dependencies.notConfiguredStatus'), state: 'neutral' }}
+              status={{ key: 'operations.dependencies.notConfiguredStatus', state: 'neutral' }}
             />
           </div>
           <p className="operational-note mt-3 mb-0">{t('operations.dependencies.note')}</p>
@@ -367,6 +360,7 @@ function Detail({ label, value, caption }: { label: string; value: string; capti
 }
 
 function Dependency({ name, detail, status }: { name: string; detail: string; status: HealthItem }) {
+  const { t } = useI18n();
   return (
     <div className="dependency-item">
       <span
@@ -382,7 +376,7 @@ function Dependency({ name, detail, status }: { name: string; detail: string; st
       <span
         className={`dependency-state ${status.state}${status.state === 'neutral' ? ' neutral-state' : ''}`}
       >
-        {status.label}
+        {t(status.key, status.values)}
       </span>
     </div>
   );
