@@ -4,8 +4,8 @@ import type { TranslationKey } from '../../i18n/messages';
 import { ApiError, getJson, request } from '../../services/http';
 
 interface AccessRequestSummary {
-  id: string;
-  userId: string;
+  publicId: string;
+  userPublicId: string;
   username: string;
   purpose: 'live_monitoring' | 'camera_access';
   status: 'pending' | 'reviewed';
@@ -76,18 +76,20 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
   }, [load]);
 
   async function review(item: AccessRequestSummary) {
-    setBusyId(item.id);
+    setBusyId(item.publicId);
     setError('');
     setNotice('');
     try {
-      const response = await request(`/api/v1/admin/access-requests/${item.id}/review`, { method: 'POST' });
+      const response = await request(`/api/v1/admin/access-requests/${item.publicId}/review`, {
+        method: 'POST',
+      });
       if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
       setPage(
         (current) =>
           current && {
             ...current,
             items: current.items.map((requestItem) =>
-              requestItem.id === item.id ? { ...requestItem, status: 'reviewed' } : requestItem,
+              requestItem.publicId === item.publicId ? { ...requestItem, status: 'reviewed' } : requestItem,
             ),
           },
       );
@@ -227,7 +229,7 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
           ) : (
             <ul className="admin-grant-list">
               {visibleRequests.map((item) => (
-                <li key={item.id}>
+                <li key={item.publicId}>
                   <div>
                     <strong>{item.username}</strong>
                     <p className="small mb-1">{t(purposeLabels[item.purpose])}</p>
@@ -239,7 +241,7 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
                     <button
                       className="btn btn-outline-light btn-sm"
                       type="button"
-                      onClick={() => onManageUser(item.userId)}
+                      onClick={() => onManageUser(item.userPublicId)}
                     >
                       {t('admin.accessRequests.manageUser')}
                     </button>
@@ -250,7 +252,7 @@ export function AdminAccessRequestsPanel({ onManageUser }: AdminAccessRequestsPa
                         disabled={!!busyId}
                         onClick={() => void review(item)}
                       >
-                        {busyId === item.id
+                        {busyId === item.publicId
                           ? t('admin.accessRequests.reviewing')
                           : t('admin.accessRequests.review')}
                       </button>

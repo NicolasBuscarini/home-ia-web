@@ -37,6 +37,8 @@ O painel autentica e organiza a navegação principal como **Monitoramento**, **
 
 Um `User` pode enviar um pedido de acesso categorizado; seu estado pendente é carregado ao entrar na landing. A solicitação é auditada e persistida, mas nunca concede câmera por si só. Administrators podem marcar o pedido como analisado e precisam atribuir o perfil/escopo separadamente. E-mail de pedido não está configurado; UI informa essa limitação.
 
+Gestão e clipes consomem IDs públicos da API (`publicId`, `profileVersionPublicId` e IDs públicos de câmera/contexto); não constroem URLs ou filtros com PKs internas. A API permanece autoridade de validação e autorização. O formato e a migração são documentados no contrato local da Platform.
+
 Idiomas disponíveis: Português (Brasil) e English (US). A seleção fica salva no browser; na primeira visita, o idioma do navegador escolhe inglês quando compatível e, nos demais casos, usa pt-BR. Componentes obtêm `t()` e o idioma por `useI18n()`; novas mensagens são adicionadas uma única vez por locale ao catálogo tipado em `src/i18n/messages.ts`, com interpolação de valores, sem ramificações de interface duplicadas.
 
 Execute as verificações a partir do repositório de contexto com `./garage verify-web`; ele encaminha ao Compose fixado do projeto web.

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/messages';
-import { ApiError, getJson } from '../../services/http';
+import { ApiError, getJson, request } from '../../services/http';
 
 interface ClipItem {
-  clipId: string;
+  publicId: string;
   cameraId: string;
   startedAtUtc: string;
   endedAtUtc: string;
@@ -27,7 +27,6 @@ interface ClipDetails {
   mediaUrl: string | null;
   mediaSha256: string | null;
   thumbnailSha256: string | null;
-  segmentIds: string[];
   attemptCount: number;
   updatedAtUtc: string;
 }
@@ -55,7 +54,52 @@ const analysisKeys: Record<string, TranslationKey> = {
   retry_wait: 'clips.analysisState.retry_wait',
   failed: 'clips.analysisState.failed',
 };
-export function ClipsPanel({ cameraId }: { cameraId?: string }) {
+interface TriggerConfiguration {
+  cameraId: string;
+  enabled: boolean;
+  version: number;
+  updatedAtUtc: string;
+  name?: string;
+}
+interface AdminCamera {
+  cameraId: string;
+  name: string;
+  isEnabled: boolean;
+}
+type DispatchPolicy = 'always' | 'large_motion' | 'manual_only' | 'never';
+interface DispatchPolicyView {
+  cameraId: string;
+  contextId: string;
+  policy: DispatchPolicy;
+  version: number;
+  updatedAtUtc: string | null;
+  canRequest: boolean;
+  canManage: boolean;
+}
+const dispatchPolicyKeys: Record<DispatchPolicy, TranslationKey> = {
+  always: 'clips.policy.always',
+  large_motion: 'clips.policy.large_motion',
+  manual_only: 'clips.policy.manual_only',
+  never: 'clips.policy.never',
+};
+const dispatchPolicyDescriptionKeys: Record<DispatchPolicy, TranslationKey> = {
+  always: 'clips.policy.description.always',
+  large_motion: 'clips.policy.description.large_motion',
+  manual_only: 'clips.policy.description.manual_only',
+  never: 'clips.policy.description.never',
+};
+
+function createIdempotencyKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  if (!globalThis.crypto?.getRandomValues) throw new Error('secure_random_unavailable');
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; isAdmin?: boolean }) {
   const { t, locale } = useI18n();
   const [items, setItems] = useState<ClipItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -66,6 +110,45 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
   const [selected, setSelected] = useState<ClipDetails>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [triggerConfigurations, setTriggerConfigurations] = useState<TriggerConfiguration[]>([]);
+  const [triggerBusy, setTriggerBusy] = useState<string>();
+  const [triggerLoading, setTriggerLoading] = useState(false);
+  const [triggerError, setTriggerError] = useState('');
+  const [triggerMessage, setTriggerMessage] = useState('');
+  const [dispatchPolicies, setDispatchPolicies] = useState<DispatchPolicyView[]>([]);
+  const [policyDrafts, setPolicyDrafts] = useState<Record<string, DispatchPolicy>>({});
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [policyLoadErrors, setPolicyLoadErrors] = useState<string[]>([]);
+  const [policyBusyCamera, setPolicyBusyCamera] = useState<string>();
+  const [policyNotice, setPolicyNotice] = useState<{ text: string; error: boolean }>();
+  const [analysisBusyClip, setAnalysisBusyClip] = useState<string>();
+  const [analysisNotice, setAnalysisNotice] = useState<{ clipId: string; text: string; error: boolean }>();
+
+  const loadDispatchPolicies = useCallback(async (cameraIds: string[]) => {
+    const ids = [...new Set(cameraIds.filter(Boolean))];
+    if (ids.length === 0) {
+      setDispatchPolicies([]);
+      setPolicyLoadErrors([]);
+      return;
+    }
+    setPolicyLoading(true);
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          return await getJson<DispatchPolicyView>(
+            `/api/v1/cameras/${encodeURIComponent(id)}/clip-analysis-dispatch-policy`,
+          );
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const loaded = results.filter((item): item is DispatchPolicyView => item !== null);
+    setDispatchPolicies(loaded);
+    setPolicyDrafts(Object.fromEntries(loaded.map((item) => [item.cameraId, item.policy])));
+    setPolicyLoadErrors(ids.filter((_, index) => results[index] === null));
+    setPolicyLoading(false);
+  }, []);
 
   const load = useCallback(
     async (targetPage = 1) => {
@@ -81,6 +164,10 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
         setItems(result.items);
         setTotal(result.total);
         setPage(result.page);
+        await loadDispatchPolicies([
+          ...(cameraId ? [cameraId] : []),
+          ...result.items.map((item) => item.cameraId),
+        ]);
       } catch (failure) {
         setError(
           failure instanceof ApiError && failure.status === 403
@@ -93,13 +180,203 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
         setBusy(false);
       }
     },
-    [cameraId, from, state, t, to],
+    [cameraId, from, loadDispatchPolicies, state, t, to],
   );
 
   useEffect(() => {
     setSelected(undefined);
     void load(1);
   }, [load]);
+
+  const loadTriggerConfigurations = useCallback(async () => {
+    if (!isAdmin) return;
+    setTriggerLoading(true);
+    setTriggerError('');
+    try {
+      const catalog = await getJson<{ items: AdminCamera[] }>('/api/v1/admin/cameras?page=1&pageSize=100');
+      const settings = await Promise.all(
+        catalog.items.map(async (camera) => ({
+          ...(await getJson<TriggerConfiguration>(
+            `/api/v1/admin/cameras/${encodeURIComponent(camera.cameraId)}/clip-trigger`,
+          )),
+          name: camera.name,
+        })),
+      );
+      setTriggerConfigurations(settings);
+    } catch {
+      setTriggerError(t('clips.trigger.loadError'));
+      setTriggerConfigurations([]);
+    } finally {
+      setTriggerLoading(false);
+    }
+  }, [isAdmin, t]);
+
+  useEffect(() => {
+    void loadTriggerConfigurations();
+  }, [loadTriggerConfigurations]);
+
+  async function updateTrigger(setting: TriggerConfiguration) {
+    setTriggerBusy(setting.cameraId);
+    setTriggerError('');
+    setTriggerMessage('');
+    try {
+      const response = await request(
+        `/api/v1/admin/cameras/${encodeURIComponent(setting.cameraId)}/clip-trigger`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ expectedVersion: setting.version, enabled: !setting.enabled }),
+        },
+      );
+      if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
+      const updated = (await response.json()) as TriggerConfiguration;
+      setTriggerConfigurations((current) =>
+        current.map((item) => (item.cameraId === updated.cameraId ? { ...updated, name: item.name } : item)),
+      );
+      setTriggerMessage(t(updated.enabled ? 'clips.trigger.enabled' : 'clips.trigger.disabled'));
+    } catch (failure) {
+      setTriggerError(
+        failure instanceof ApiError && failure.status === 409
+          ? t('clips.trigger.conflict')
+          : t('clips.trigger.updateError'),
+      );
+      await loadTriggerConfigurations();
+    } finally {
+      setTriggerBusy(undefined);
+    }
+  }
+
+  const visiblePolicyCameraIds = () => [
+    ...(cameraId ? [cameraId] : []),
+    ...items.map((item) => item.cameraId),
+  ];
+
+  async function updateDispatchPolicy(setting: DispatchPolicyView) {
+    const policy = policyDrafts[setting.cameraId] ?? setting.policy;
+    if (policy === setting.policy) return;
+    setPolicyBusyCamera(setting.cameraId);
+    setPolicyNotice(undefined);
+    try {
+      const response = await request(
+        `/api/v1/cameras/${encodeURIComponent(setting.cameraId)}/clip-analysis-dispatch-policy`,
+        { method: 'PUT', body: JSON.stringify({ expectedVersion: setting.version, policy }) },
+      );
+      if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
+      const updated = (await response.json()) as Omit<DispatchPolicyView, 'canRequest' | 'canManage'>;
+      setDispatchPolicies((current) =>
+        current.map((item) => (item.cameraId === updated.cameraId ? { ...item, ...updated } : item)),
+      );
+      setPolicyDrafts((current) => ({ ...current, [updated.cameraId]: updated.policy }));
+      setPolicyNotice({ text: t('clips.policy.saved'), error: false });
+    } catch (failure) {
+      setPolicyNotice({
+        text:
+          failure instanceof ApiError && failure.status === 409
+            ? t('clips.policy.conflict')
+            : t('clips.policy.saveError'),
+        error: true,
+      });
+      await loadDispatchPolicies(visiblePolicyCameraIds());
+    } finally {
+      setPolicyBusyCamera(undefined);
+    }
+  }
+
+  async function requestClipAnalysis(clip: ClipItem) {
+    setAnalysisBusyClip(clip.publicId);
+    setAnalysisNotice(undefined);
+    try {
+      const response = await request(`/api/v1/clips/${encodeURIComponent(clip.publicId)}/analysis-requests`, {
+        method: 'POST',
+        body: JSON.stringify({ idempotencyKey: createIdempotencyKey() }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { code?: string };
+        if (response.status === 409 && payload.code === 'analysis_not_allowed') {
+          setAnalysisNotice({ clipId: clip.publicId, text: t('clips.analysis.never'), error: true });
+          await loadDispatchPolicies(visiblePolicyCameraIds());
+          return;
+        }
+        if (response.status === 409 && payload.code === 'analysis_capacity_reached')
+          throw new Error('capacity');
+        if (response.status === 404 || response.status === 403) throw new Error('denied');
+        throw new Error('request');
+      }
+      const result = (await response.json()) as { state: string; existing: boolean };
+      setItems((current) =>
+        current.map((item) =>
+          item.publicId === clip.publicId ? { ...item, analysisStatus: result.state } : item,
+        ),
+      );
+      setSelected((current) =>
+        current?.clip.publicId === clip.publicId
+          ? { ...current, clip: { ...current.clip, analysisStatus: result.state } }
+          : current,
+      );
+      setAnalysisNotice({
+        clipId: clip.publicId,
+        text: t(result.existing ? 'clips.analysis.existing' : 'clips.analysis.submitted'),
+        error: false,
+      });
+    } catch (failure) {
+      const reason = failure instanceof Error ? failure.message : 'request';
+      setAnalysisNotice({
+        clipId: clip.publicId,
+        text: t(
+          reason === 'capacity'
+            ? 'clips.analysis.capacity'
+            : reason === 'denied'
+              ? 'clips.analysis.denied'
+              : reason === 'secure_random_unavailable'
+                ? 'clips.analysis.secureRandom'
+                : 'clips.analysis.requestError',
+        ),
+        error: true,
+      });
+    } finally {
+      setAnalysisBusyClip(undefined);
+    }
+  }
+
+  function renderAnalysisAction(clip: ClipItem) {
+    if (clip.state !== 'ready') return null;
+    const policy = dispatchPolicies.find((item) => item.cameraId === clip.cameraId);
+    if (!policy) {
+      if (policyLoading) return <span role="status">{t('clips.policy.loading')}</span>;
+      if (policyLoadErrors.includes(clip.cameraId))
+        return (
+          <span role="alert" className="error-text">
+            {t('clips.policy.unavailable')}
+          </span>
+        );
+      return null;
+    }
+    if (!policy.canRequest) return null;
+    const never = policy.policy === 'never';
+    return (
+      <div className="d-flex flex-column align-items-start gap-1">
+        <button
+          className="btn btn-outline-primary"
+          type="button"
+          disabled={never || analysisBusyClip !== undefined}
+          onClick={() => void requestClipAnalysis(clip)}
+        >
+          {analysisBusyClip === clip.publicId
+            ? t('clips.analysis.sending')
+            : t(clip.analysisStatus === 'not_requested' ? 'clips.analysis.send' : 'clips.analysis.resend')}
+        </button>
+        {never && <span className="small text-secondary">{t('clips.analysis.never')}</span>}
+        {analysisNotice?.clipId === clip.publicId && (
+          <span
+            role={analysisNotice.error ? 'alert' : 'status'}
+            aria-live="polite"
+            className={analysisNotice.error ? 'error-text' : 'small text-secondary'}
+          >
+            {analysisNotice.text}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   async function openClip(clipId: string) {
     setSelected(undefined);
@@ -128,6 +405,134 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
         {t('clips.title')}
       </h2>
       <p className="small text-secondary">{t('clips.description')}</p>
+      {isAdmin && (
+        <section className="panel-card mb-3" aria-labelledby="clip-trigger-title">
+          <h3 id="clip-trigger-title" className="h6">
+            {t('clips.trigger.title')}
+          </h3>
+          <p className="small text-secondary">{t('clips.trigger.description')}</p>
+          {triggerError && (
+            <p role="alert" className="error-text">
+              {triggerError}
+            </p>
+          )}
+          {triggerMessage && (
+            <p role="status" aria-live="polite">
+              {triggerMessage}
+            </p>
+          )}
+          {triggerLoading && (
+            <p role="status" aria-live="polite">
+              {t('clips.trigger.loading')}
+            </p>
+          )}
+          <ul className="list-unstyled mb-0">
+            {triggerConfigurations.map((setting) => (
+              <li
+                key={setting.cameraId}
+                className="d-flex flex-wrap align-items-center justify-content-between gap-2 py-2"
+              >
+                <span>{setting.name ?? setting.cameraId}</span>
+                <button
+                  className={`btn ${setting.enabled ? 'btn-outline-danger' : 'btn-outline-primary'}`}
+                  type="button"
+                  disabled={triggerLoading || triggerBusy !== undefined}
+                  aria-pressed={setting.enabled}
+                  onClick={() => void updateTrigger(setting)}
+                >
+                  {triggerBusy === setting.cameraId
+                    ? t('clips.trigger.saving')
+                    : t(setting.enabled ? 'clips.trigger.turnOff' : 'clips.trigger.turnOn')}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {triggerConfigurations.length === 0 && !triggerError && !triggerLoading && (
+            <p role="status">{t('clips.trigger.empty')}</p>
+          )}
+        </section>
+      )}
+      {(cameraId || dispatchPolicies.length > 0 || policyLoading || policyLoadErrors.length > 0) && (
+        <section className="panel-card mb-3" aria-labelledby="clip-policy-title">
+          <h3 id="clip-policy-title" className="h6">
+            {t('clips.policy.title')}
+          </h3>
+          <p className="small text-secondary">{t('clips.policy.description')}</p>
+          {policyLoading && (
+            <p role="status" aria-live="polite">
+              {t('clips.policy.loading')}
+            </p>
+          )}
+          {policyNotice && (
+            <p
+              role={policyNotice.error ? 'alert' : 'status'}
+              aria-live="polite"
+              className={policyNotice.error ? 'error-text' : undefined}
+            >
+              {policyNotice.text}
+            </p>
+          )}
+          {policyLoadErrors.length > 0 && (
+            <p role="alert" className="error-text">
+              {t('clips.policy.unavailable')}
+            </p>
+          )}
+          <ul className="list-unstyled mb-0">
+            {dispatchPolicies.map((setting) => {
+              const draft = policyDrafts[setting.cameraId] ?? setting.policy;
+              return (
+                <li key={setting.cameraId} className="border-top py-3">
+                  <strong>{setting.cameraId}</strong>
+                  <p className="small text-secondary mt-1 mb-2">
+                    {t('clips.policy.current', { policy: t(dispatchPolicyKeys[setting.policy]) })} —{' '}
+                    {t(dispatchPolicyDescriptionKeys[setting.policy])}
+                  </p>
+                  {setting.policy === 'never' && (
+                    <p className="small text-secondary">{t('clips.policy.neverExplanation')}</p>
+                  )}
+                  {setting.canManage && (
+                    <div className="d-flex flex-wrap align-items-end gap-2">
+                      <div className="flex-grow-1">
+                        <label className="form-label" htmlFor={`clip-policy-${setting.cameraId}`}>
+                          {t('clips.policy.label')}
+                        </label>
+                        <select
+                          className="form-select"
+                          id={`clip-policy-${setting.cameraId}`}
+                          value={draft}
+                          disabled={policyBusyCamera !== undefined}
+                          onChange={(event) =>
+                            setPolicyDrafts((current) => ({
+                              ...current,
+                              [setting.cameraId]: event.target.value as DispatchPolicy,
+                            }))
+                          }
+                        >
+                          {(['always', 'large_motion', 'manual_only', 'never'] as const).map((value) => (
+                            <option key={value} value={value}>
+                              {t(dispatchPolicyKeys[value])}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={policyBusyCamera !== undefined || draft === setting.policy}
+                        onClick={() => void updateDispatchPolicy(setting)}
+                      >
+                        {policyBusyCamera === setting.cameraId
+                          ? t('clips.policy.saving')
+                          : t('clips.policy.save')}
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       <form
         className="row g-2 align-items-end mb-3"
         onSubmit={(event) => {
@@ -198,7 +603,7 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
         <>
           <ol className="clip-timeline" aria-label={t('clips.timeline')}>
             {items.map((clip) => (
-              <li className="clip-timeline-item" key={clip.clipId}>
+              <li className="clip-timeline-item" key={clip.publicId}>
                 {clip.thumbnailUrl && (
                   <img src={clip.thumbnailUrl} alt="" loading="lazy" className="clip-thumbnail" />
                 )}
@@ -212,13 +617,16 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
                     {t('clips.analysis')}: {t(analysisKeys[clip.analysisStatus] ?? 'clips.unknown')}
                   </span>
                 </div>
-                <button
-                  className="btn btn-outline-primary"
-                  type="button"
-                  onClick={() => void openClip(clip.clipId)}
-                >
-                  {t('clips.details')}
-                </button>
+                <div className="d-flex flex-wrap align-items-start gap-2">
+                  <button
+                    className="btn btn-outline-primary"
+                    type="button"
+                    onClick={() => void openClip(clip.publicId)}
+                  >
+                    {t('clips.details')}
+                  </button>
+                  {renderAnalysisAction(clip)}
+                </div>
               </li>
             ))}
           </ol>
@@ -266,11 +674,10 @@ export function ClipsPanel({ cameraId }: { cameraId?: string }) {
             <dd>{t(analysisKeys[selected.clip.analysisStatus] ?? 'clips.unknown')}</dd>
             <dt>{t('clips.trigger')}</dt>
             <dd>{selected.clip.triggerReason ?? t('clips.unknown')}</dd>
-            <dt>{t('clips.segments')}</dt>
-            <dd>{selected.segmentIds.length}</dd>
             <dt>{t('clips.updated')}</dt>
             <dd>{formatDate(selected.updatedAtUtc)}</dd>
           </dl>
+          {renderAnalysisAction(selected.clip)}
           {selected.mediaUrl && (
             <>
               <p className="small text-secondary">{t('clips.captionsUnavailable')}</p>

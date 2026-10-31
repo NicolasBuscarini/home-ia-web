@@ -4,8 +4,8 @@ import { ApiError, getJson, request } from '../../services/http';
 import { PERMISSION_GROUPS, permissionDescription, permissionName } from './permissionCatalog';
 
 interface Profile {
-  id: string;
-  currentVersionId: string;
+  publicId: string;
+  currentVersionPublicId: string;
   name: string;
   isActive: boolean;
   version: number;
@@ -74,9 +74,9 @@ export function AdminProfilesPanel() {
     setError('');
     setNotice('');
     try {
-      const editing = profiles.find((item) => item.id === editingProfileId);
+      const editing = profiles.find((item) => item.publicId === editingProfileId);
       const response = await request(
-        editing ? `/api/v1/admin/access-rules/${editing.id}/versions` : '/api/v1/admin/access-rules',
+        editing ? `/api/v1/admin/access-rules/${editing.publicId}/versions` : '/api/v1/admin/access-rules',
         {
           method: 'POST',
           body: JSON.stringify(
@@ -99,7 +99,7 @@ export function AdminProfilesPanel() {
     }
   }
 
-  const editing = profiles.find((profile) => profile.id === editingProfileId);
+  const editing = profiles.find((profile) => profile.publicId === editingProfileId);
 
   const groupedPermissions = useMemo(() => {
     const assigned = new Set<string>();
@@ -190,7 +190,7 @@ export function AdminProfilesPanel() {
               disabled={busy}
               onChange={(event) => {
                 const id = event.currentTarget.value;
-                const selected = profiles.find((profile) => profile.id === id);
+                const selected = profiles.find((profile) => profile.publicId === id);
                 setEditingProfileId(id);
                 setProfileName(selected?.name ?? '');
                 setPermissionKeys(selected?.permissionKeys ?? []);
@@ -198,7 +198,7 @@ export function AdminProfilesPanel() {
             >
               <option value="">{t('admin.profiles.newProfile')}</option>
               {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id} disabled={!profile.isActive}>
+                <option key={profile.publicId} value={profile.publicId} disabled={!profile.isActive}>
                   {profile.name} · v{profile.version}
                 </option>
               ))}
@@ -318,7 +318,7 @@ export function AdminProfilesPanel() {
         )}
         <ul className="admin-profile-list">
           {profiles.map((profile) => (
-            <li className="admin-profile-card" key={profile.id}>
+            <li className="admin-profile-card" key={profile.publicId}>
               <div className="admin-user-summary">
                 <div>
                   <h4 className="h6 mb-1">
@@ -334,7 +334,7 @@ export function AdminProfilesPanel() {
                     type="button"
                     disabled={busy}
                     onClick={() => {
-                      setEditingProfileId(profile.id);
+                      setEditingProfileId(profile.publicId);
                       setProfileName(profile.name);
                       setPermissionKeys(profile.permissionKeys);
                     }}

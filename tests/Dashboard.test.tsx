@@ -132,7 +132,7 @@ describe('dashboard navigation', () => {
 
   it('loads a chronological clip page and authorized detail/playback on demand', async () => {
     const clip = {
-      clipId: '0123456789abcdef0123456789abcdef',
+      publicId: 'CLP000000000001',
       cameraId: 'garage-01',
       startedAtUtc: '2026-10-31T10:00:00Z',
       endedAtUtc: '2026-10-31T10:00:30Z',
@@ -150,14 +150,13 @@ describe('dashboard navigation', () => {
         return new Response(JSON.stringify({ items: [clip], page: 1, pageSize: 20, total: 1 }), {
           status: 200,
         });
-      if (path === `/api/v1/clips/${clip.clipId}`)
+      if (path === `/api/v1/clips/${clip.publicId}`)
         return new Response(
           JSON.stringify({
             clip,
-            mediaUrl: `/api/v1/clips/${clip.clipId}/media`,
+            mediaUrl: `/api/v1/clips/${clip.publicId}/media`,
             mediaSha256: 'a'.repeat(64),
             thumbnailSha256: null,
-            segmentIds: ['source'],
             attemptCount: 1,
             updatedAtUtc: clip.endedAtUtc,
           }),

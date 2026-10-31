@@ -4,17 +4,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminUsersPanel } from '../src/features/admin/AdminUsersPanel';
 import { I18nProvider } from '../src/i18n/i18n';
 
-const account = { id: 'user-1', userName: 'local-user', isActive: true };
+const account = { publicId: 'USR000000000001', userName: 'local-user', isActive: true };
 const profile = {
-  id: 'profile-1',
-  currentVersionId: 'profile-version-1',
+  publicId: 'PRF000000000001',
+  currentVersionPublicId: 'PVN000000000001',
   name: 'Garage operator',
   isActive: true,
   version: 1,
   updatedAtUtc: '2026-10-30T00:00:00Z',
   permissionKeys: ['live.video.view'],
 };
-const camera = { cameraId: 'garage-01', contextId: 'garage', name: 'Garagem', isEnabled: true };
+const camera = {
+  cameraId: 'CAM000000000001',
+  contextId: 'CTX000000000001',
+  name: 'Garagem',
+  isEnabled: true,
+};
 
 function response(body: unknown, status = 200) {
   return new Response(status === 204 ? null : JSON.stringify(body), {
@@ -34,7 +39,7 @@ describe('administrative user management', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input);
       paths.push(path);
-      if (path.startsWith('/api/v1/admin/users?page=1&pageSize=25&userId=user-1'))
+      if (path.startsWith('/api/v1/admin/users?page=1&pageSize=25&userId=USR000000000001'))
         return response({ items: [account], page: 1, pageSize: 25, totalCount: 1 });
       if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [camera] });
       if (path === '/api/v1/admin/access-rules') return response([profile]);
@@ -43,13 +48,13 @@ describe('administrative user management', () => {
 
     render(
       <I18nProvider>
-        <AdminUsersPanel initialUserId="user-1" />
+        <AdminUsersPanel initialUserId="USR000000000001" />
       </I18nProvider>,
     );
 
     expect(await screen.findByRole('heading', { name: 'local-user' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Exibindo uma única conta filtrada');
-    expect(paths).toContain('/api/v1/admin/users?page=1&pageSize=25&userId=user-1');
+    expect(paths).toContain('/api/v1/admin/users?page=1&pageSize=25&userId=USR000000000001');
     expect(screen.getByRole('button', { name: 'Limpar filtro de usuário' })).toBeInTheDocument();
   });
 
@@ -65,17 +70,17 @@ describe('administrative user management', () => {
         return response({ items: [account], page: 1, pageSize: 25, totalCount: 1 });
       if (path === '/api/v1/admin/cameras?page=1&pageSize=100') return response({ items: [camera] });
       if (path === '/api/v1/admin/access-rules') return response([profile]);
-      if (path === '/api/v1/admin/users/user-1' && method === 'GET')
+      if (path === '/api/v1/admin/users/USR000000000001' && method === 'GET')
         return response({ ...account, isAdministrator: false, accessProfiles: savedAssignments });
-      if (path === '/api/v1/admin/users/user-1/access-rules' && method === 'PUT') {
+      if (path === '/api/v1/admin/users/USR000000000001/access-rules' && method === 'PUT') {
         savedAssignments = [
           {
-            assignmentId: 'assignment-1',
-            profileId: 'profile-1',
-            profileVersionId: 'profile-version-1',
+            assignmentPublicId: 'ASN000000000001',
+            profilePublicId: 'PRF000000000001',
+            profileVersionPublicId: 'PVN000000000001',
             profileName: 'Garage operator',
             profileVersion: 1,
-            scopes: [{ contextId: 'garage', cameraId: 'garage-01' }],
+            scopes: [{ contextId: 'CTX000000000001', cameraId: 'CAM000000000001' }],
             assignedAtUtc: '2026-10-30T00:00:00Z',
           },
         ];
@@ -95,18 +100,18 @@ describe('administrative user management', () => {
     await user.click(screen.getByRole('button', { name: 'Detalhes' }));
     await screen.findByRole('group', { name: 'Perfis atribuídos e escopo de câmera' });
     await user.click(screen.getByRole('checkbox', { name: 'Garage operator · v1' }));
-    await user.click(screen.getByRole('checkbox', { name: /Garagem \(garage · garage-01\)/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Garagem \(CTX000000000001 · CAM000000000001\)/ }));
     await user.click(screen.getByRole('button', { name: 'Salvar atribuições de perfil' }));
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        path: '/api/v1/admin/users/user-1/access-rules',
+        path: '/api/v1/admin/users/USR000000000001/access-rules',
         method: 'PUT',
         body: JSON.stringify({
           assignments: [
             {
-              profileVersionId: 'profile-version-1',
-              scopes: [{ contextId: 'garage', cameraId: 'garage-01' }],
+              profileVersionPublicId: 'PVN000000000001',
+              scopes: [{ contextId: 'CTX000000000001', cameraId: 'CAM000000000001' }],
             },
           ],
         }),
@@ -168,7 +173,7 @@ describe('administrative user management', () => {
       const path = String(input);
       if (path.startsWith('/api/v1/admin/users?page='))
         return response({
-          items: [account, { id: 'user-2', userName: 'garage-operator', isActive: true }],
+          items: [account, { publicId: 'USR000000000002', userName: 'garage-operator', isActive: true }],
           page: 1,
           pageSize: 25,
           totalCount: 2,

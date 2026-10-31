@@ -32,8 +32,8 @@ describe('administrative permission profile management', () => {
       if (path === '/api/v1/admin/access-rules' && method === 'POST') {
         profiles = [
           {
-            id: 'profile-1',
-            currentVersionId: 'profile-version-1',
+            publicId: 'PRF000000000001',
+            currentVersionPublicId: 'PVN000000000001',
             name: 'Garage operator',
             isActive: true,
             version: 1,
@@ -74,8 +74,8 @@ describe('administrative permission profile management', () => {
 
   it('publishes a new immutable version without an API call to user assignments', async () => {
     const initial = {
-      id: 'profile-1',
-      currentVersionId: 'profile-version-1',
+      publicId: 'PRF000000000001',
+      currentVersionPublicId: 'PVN000000000001',
       name: 'Garage operator',
       isActive: true,
       version: 1,
@@ -92,10 +92,10 @@ describe('administrative permission profile management', () => {
       if (path === '/api/v1/admin/access-rules' && method === 'GET') return response([currentVersion]);
       if (path === '/api/v1/admin/permission-catalog')
         return response([permission, { key: 'events.read', description: 'Read events', isDelegable: true }]);
-      if (path === '/api/v1/admin/access-rules/profile-1/versions' && method === 'POST') {
+      if (path === '/api/v1/admin/access-rules/PRF000000000001/versions' && method === 'POST') {
         currentVersion = {
           ...initial,
-          currentVersionId: 'profile-version-2',
+          currentVersionPublicId: 'PVN000000000002',
           version: 2,
           permissionKeys: ['live.video.view', 'events.read'],
         };
@@ -116,7 +116,7 @@ describe('administrative permission profile management', () => {
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        path: '/api/v1/admin/access-rules/profile-1/versions',
+        path: '/api/v1/admin/access-rules/PRF000000000001/versions',
         method: 'POST',
         body: JSON.stringify({ expectedVersion: 1, permissionKeys: ['live.video.view', 'events.read'] }),
       }),
@@ -133,11 +133,11 @@ describe('administrative permission profile management', () => {
       requests.push(`${init?.method ?? 'GET'} ${path}`);
       if (path === '/api/v1/admin/access-rules' && init?.method === 'POST') {
         const created = {
-          id: 'empty-profile',
+          publicId: 'PRF000000000002',
           name: 'Restricted',
           isActive: true,
           version: 1,
-          currentVersionId: 'empty-version',
+          currentVersionPublicId: 'PVN000000000003',
           permissionKeys: [],
           updatedAtUtc: '2026-10-30T00:00:00Z',
         };

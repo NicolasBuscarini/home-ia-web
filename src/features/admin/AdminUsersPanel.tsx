@@ -4,7 +4,7 @@ import { ApiError, getJson, request } from '../../services/http';
 
 type ErrorKind = 'load' | 'support' | 'save' | 'deactivate' | 'forbidden' | 'conflict' | 'session';
 interface UserSummary {
-  id: string;
+  publicId: string;
   userName: string;
   isActive: boolean;
 }
@@ -15,8 +15,8 @@ interface Camera {
   isEnabled: boolean;
 }
 interface Profile {
-  id: string;
-  currentVersionId: string;
+  publicId: string;
+  currentVersionPublicId: string;
   name: string;
   isActive: boolean;
   version: number;
@@ -28,9 +28,9 @@ interface Scope {
   cameraId: string;
 }
 interface Assignment {
-  assignmentId: string;
-  profileId: string;
-  profileVersionId: string;
+  assignmentPublicId: string;
+  profilePublicId: string;
+  profileVersionPublicId: string;
   profileName: string;
   profileVersion: number;
   scopes: Scope[];
@@ -118,22 +118,22 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
 
   async function openDetails(user: UserSummary) {
     setNotice('');
-    if (expandedId === user.id) {
+    if (expandedId === user.publicId) {
       setExpandedId(undefined);
       setDetail(undefined);
       return;
     }
-    setExpandedId(user.id);
+    setExpandedId(user.publicId);
     setDetail(undefined);
     setBusy(true);
     setError('');
     try {
-      const result = await getJson<UserDetails>(`/api/v1/admin/users/${user.id}`);
+      const result = await getJson<UserDetails>(`/api/v1/admin/users/${user.publicId}`);
       setDetail(result);
       setAssignments(
         result.accessProfiles.map((item) => ({
-          profileId: item.profileId,
-          profileVersionId: item.profileVersionId,
+          profileId: item.profilePublicId,
+          profileVersionId: item.profileVersionPublicId,
           profileVersion: item.profileVersion,
           scopes: item.scopes.map((scope) => `${scope.contextId}\u0000${scope.cameraId}`),
         })),
@@ -152,13 +152,13 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
         ? [
             ...current,
             {
-              profileId: profile.id,
-              profileVersionId: profile.currentVersionId,
+              profileId: profile.publicId,
+              profileVersionId: profile.currentVersionPublicId,
               profileVersion: profile.version,
               scopes: [],
             },
           ]
-        : current.filter((item) => item.profileId !== profile.id),
+        : current.filter((item) => item.profileId !== profile.publicId),
     );
   }
 
@@ -181,11 +181,11 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
     setError('');
     setNotice('');
     try {
-      const response = await request(`/api/v1/admin/users/${detail.id}/access-rules`, {
+      const response = await request(`/api/v1/admin/users/${detail.publicId}/access-rules`, {
         method: 'PUT',
         body: JSON.stringify({
           assignments: assignments.map((item) => ({
-            profileVersionId: item.profileVersionId,
+            profileVersionPublicId: item.profileVersionId,
             scopes: item.scopes.map((value) => {
               const [contextId, cameraId] = value.split('\u0000');
               return { contextId, cameraId };
@@ -194,12 +194,12 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
         }),
       });
       if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
-      const updated = await getJson<UserDetails>(`/api/v1/admin/users/${detail.id}`);
+      const updated = await getJson<UserDetails>(`/api/v1/admin/users/${detail.publicId}`);
       setDetail(updated);
       setAssignments(
         updated.accessProfiles.map((item) => ({
-          profileId: item.profileId,
-          profileVersionId: item.profileVersionId,
+          profileId: item.profilePublicId,
+          profileVersionId: item.profileVersionPublicId,
           profileVersion: item.profileVersion,
           scopes: item.scopes.map((scope) => `${scope.contextId}\u0000${scope.cameraId}`),
         })),
@@ -218,7 +218,7 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
     setError('');
     setNotice('');
     try {
-      const response = await request(`/api/v1/admin/users/${user.id}`, { method: 'DELETE' });
+      const response = await request(`/api/v1/admin/users/${user.publicId}`, { method: 'DELETE' });
       if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
       setExpandedId(undefined);
       setDetail(undefined);
@@ -342,9 +342,9 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
       {page && visibleUsers.length > 0 && (
         <div className="admin-user-list">
           {visibleUsers.map((user) => {
-            const expanded = expandedId === user.id;
+            const expanded = expandedId === user.publicId;
             return (
-              <article className="admin-user-card" key={user.id}>
+              <article className="admin-user-card" key={user.publicId}>
                 <div className="admin-user-summary">
                   <div>
                     <h3 className="h6 mb-1">{user.userName}</h3>
@@ -356,7 +356,7 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
                     className="btn btn-outline-light btn-sm"
                     type="button"
                     aria-expanded={expanded}
-                    aria-controls={`admin-user-detail-${user.id}`}
+                    aria-controls={`admin-user-detail-${user.publicId}`}
                     onClick={() => void openDetails(user)}
                     disabled={busy}
                   >
@@ -364,9 +364,9 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
                   </button>
                 </div>
                 {expanded && (
-                  <div id={`admin-user-detail-${user.id}`} className="admin-user-detail">
+                  <div id={`admin-user-detail-${user.publicId}`} className="admin-user-detail">
                     {!detail && <p role="status">{t('admin.users.loadingDetail')}</p>}
-                    {detail?.id === user.id && (
+                    {detail?.publicId === user.publicId && (
                       <>
                         {detail.isAdministrator ? (
                           <p className="small text-secondary">{t('admin.users.adminReserved')}</p>
@@ -379,9 +379,9 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
                             {profiles
                               .filter((profile) => profile.isActive)
                               .map((profile) => {
-                                const draft = assignments.find((item) => item.profileId === profile.id);
+                                const draft = assignments.find((item) => item.profileId === profile.publicId);
                                 return (
-                                  <div className="admin-profile-assignment" key={profile.id}>
+                                  <div className="admin-profile-assignment" key={profile.publicId}>
                                     <label className="form-check">
                                       <input
                                         className="form-check-input"
@@ -394,7 +394,7 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
                                         {profile.name} · v{draft?.profileVersion ?? profile.version}
                                       </span>
                                     </label>
-                                    {draft && draft.profileVersionId !== profile.currentVersionId && (
+                                    {draft && draft.profileVersionId !== profile.currentVersionPublicId && (
                                       <button
                                         className="btn btn-outline-light btn-sm ms-3"
                                         type="button"
@@ -402,10 +402,10 @@ export function AdminUsersPanel({ initialUserId }: AdminUsersPanelProps) {
                                         onClick={() =>
                                           setAssignments((current) =>
                                             current.map((item) =>
-                                              item.profileId === profile.id
+                                              item.profileId === profile.publicId
                                                 ? {
                                                     ...item,
-                                                    profileVersionId: profile.currentVersionId,
+                                                    profileVersionId: profile.currentVersionPublicId,
                                                     profileVersion: profile.version,
                                                   }
                                                 : item,

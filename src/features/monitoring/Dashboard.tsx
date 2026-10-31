@@ -129,7 +129,7 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
       </section>
       {active === 'clips' && (
         <section id="view-clips" aria-label={t('dashboard.menu.clips')}>
-          <ClipsPanel cameraId={camera?.cameraId} />
+          <ClipsPanel cameraId={camera?.cameraId} isAdmin={isAdmin} />
         </section>
       )}
       {isAdmin && camera && (active === 'health' || active === 'dependencies' || active === 'capture') && (

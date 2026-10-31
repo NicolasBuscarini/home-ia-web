@@ -28,7 +28,7 @@ describe('access request screens', () => {
       if (path === '/api/v1/access-requests' && method === 'POST') {
         return response(
           {
-            id: 'request-1',
+            publicId: 'ARQ000000000001',
             purpose: 'live_monitoring',
             status: 'pending',
             createdAtUtc: '2026-10-30T00:00:00Z',
@@ -64,8 +64,8 @@ describe('access request screens', () => {
         return response({
           items: [
             {
-              id: 'request-1',
-              userId: 'user-1',
+              publicId: 'ARQ000000000001',
+              userPublicId: 'USR000000000001',
               username: 'local-user',
               purpose: 'live_monitoring',
               status,
@@ -77,7 +77,7 @@ describe('access request screens', () => {
           totalCount: 1,
         });
       }
-      if (path === '/api/v1/admin/access-requests/request-1/review' && init?.method === 'POST') {
+      if (path === '/api/v1/admin/access-requests/ARQ000000000001/review' && init?.method === 'POST') {
         status = 'reviewed';
         return response(null, 204);
       }
@@ -91,11 +91,11 @@ describe('access request screens', () => {
     );
     expect(await screen.findByText('local-user')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Gerenciar usuário' }));
-    expect(onManageUser).toHaveBeenCalledWith('user-1');
+    expect(onManageUser).toHaveBeenCalledWith('USR000000000001');
     await user.click(screen.getByRole('button', { name: 'Marcar como analisado' }));
     expect(await screen.findByText(/as permissões do usuário não foram alteradas/i)).toBeInTheDocument();
     expect(within(screen.getByRole('list')).getByText(/Analisado/)).toBeInTheDocument();
-    expect(calls).toContain('POST /api/v1/admin/access-requests/request-1/review');
+    expect(calls).toContain('POST /api/v1/admin/access-requests/ARQ000000000001/review');
     expect(calls.filter((call) => call.startsWith('GET /api/v1/admin/access-requests?'))).toHaveLength(1);
     expect(calls.some((call) => call.includes('/access-rules') || call.includes('/access-profiles'))).toBe(
       false,
@@ -109,16 +109,16 @@ describe('access request screens', () => {
         return response({
           items: [
             {
-              id: 'request-1',
-              userId: 'user-1',
+              publicId: 'ARQ000000000001',
+              userPublicId: 'USR000000000001',
               username: 'local-user',
               purpose: 'live_monitoring',
               status: 'pending',
               createdAtUtc: '2026-10-30T00:00:00Z',
             },
             {
-              id: 'request-2',
-              userId: 'user-2',
+              publicId: 'ARQ000000000002',
+              userPublicId: 'USR000000000002',
               username: 'garage-operator',
               purpose: 'camera_access',
               status: 'reviewed',
