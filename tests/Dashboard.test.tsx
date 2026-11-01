@@ -79,6 +79,7 @@ describe('dashboard navigation', () => {
     await userEvent.setup().click(management);
     expect(within(menu).getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
     expect(within(menu).getByRole('button', { name: 'Perfis e permissões' })).toBeInTheDocument();
+    expect(within(menu).getByRole('button', { name: 'Pessoas' })).toBeInTheDocument();
     await userEvent.setup().click(within(menu).getByRole('button', { name: 'Usuários' }));
     expect(await screen.findByRole('heading', { name: 'Gestão de usuários' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Perfis e permissões' })).not.toBeInTheDocument();

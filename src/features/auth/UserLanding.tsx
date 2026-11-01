@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/i18n';
 import { ApiError, getJson, request } from '../../services/http';
+import { BiometricEnrollmentPanel } from '../biometrics/BiometricEnrollmentPanel';
 
 interface AccessRequest {
   id: string;
@@ -112,6 +113,9 @@ export function UserLanding({ canRequestAccess }: UserLandingProps) {
           )}
         </section>
       )}
+      <div className="mt-4">
+        <BiometricEnrollmentPanel />
+      </div>
     </section>
   );
 }

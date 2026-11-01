@@ -11,7 +11,8 @@ export type DashboardView =
   | 'users'
   | 'profiles'
   | 'requests'
-  | 'cameras';
+  | 'cameras'
+  | 'people';
 type MenuGroup = 'system' | 'management';
 
 const viewLabels: Record<DashboardView, TranslationKey> = {
@@ -24,6 +25,7 @@ const viewLabels: Record<DashboardView, TranslationKey> = {
   profiles: 'dashboard.menu.profiles',
   requests: 'dashboard.menu.accessRequests',
   cameras: 'dashboard.menu.cameras',
+  people: 'dashboard.menu.people',
 };
 
 interface DashboardMenuProps {
@@ -133,7 +135,7 @@ export function DashboardMenu({ active, isAdmin, onChange }: DashboardMenuProps)
             </button>
             {openGroup === 'management' && (
               <div className="dashboard-submenu" id="dashboard-submenu-management">
-                {(['cameras', 'users', 'profiles', 'requests'] as const).map((view) => (
+                {(['cameras', 'people', 'users', 'profiles', 'requests'] as const).map((view) => (
                   <button
                     key={view}
                     className="dashboard-submenu-item"
