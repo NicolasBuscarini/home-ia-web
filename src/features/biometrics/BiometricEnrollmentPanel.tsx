@@ -26,7 +26,18 @@ interface BiometricEnrollment {
   consentAcceptedAtUtc: string;
 }
 
-type SubmitError = '' | 'consent' | 'image' | 'unavailable' | 'conflict' | 'forbidden' | 'submit';
+type SubmitError =
+  | ''
+  | 'consent'
+  | 'image'
+  | 'faceNotDetected'
+  | 'multipleFaces'
+  | 'faceTooSmall'
+  | 'imageDecode'
+  | 'unavailable'
+  | 'conflict'
+  | 'forbidden'
+  | 'submit';
 type LoadError = '' | 'load';
 
 const statusKeys: Record<BiometricEnrollment['status'], TranslationKey> = {
@@ -250,7 +261,14 @@ export function BiometricEnrollmentPanel() {
 function submitErrorKind(failure: unknown): SubmitError {
   if (failure instanceof Error && failure.message === 'invalid-image') return 'image';
   if (!(failure instanceof ApiError)) return 'submit';
-  if (failure.status === 400) return failure.message === 'biometric_consent_required' ? 'consent' : 'image';
+  if (failure.status === 400) {
+    if (failure.message === 'biometric_consent_required') return 'consent';
+    if (failure.message === 'face_not_detected') return 'faceNotDetected';
+    if (failure.message === 'multiple_faces') return 'multipleFaces';
+    if (failure.message === 'face_too_small') return 'faceTooSmall';
+    if (failure.message === 'image_decode_failed') return 'imageDecode';
+    return 'image';
+  }
   if (failure.status === 403) return 'forbidden';
   if (failure.status === 409) return 'conflict';
   if (failure.status === 503) return 'unavailable';

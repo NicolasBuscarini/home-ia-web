@@ -32,12 +32,23 @@ interface FaceExtractorCandidate {
   createdAtUtc: string;
 }
 
+interface FaceExtractorRuntime {
+  enabled: boolean;
+  state: string;
+  adapterId: string;
+  modelId: string;
+  modelVersion: string;
+  detectorSha256: string | null;
+  recognizerSha256: string | null;
+}
+
 interface FaceExtractorRegistry {
   version: number;
   selectedCandidate: FaceExtractorCandidate | null;
   candidates: FaceExtractorCandidate[];
   runtimeEnabled: boolean;
   sampleCollectionEnabled: boolean;
+  runtime?: FaceExtractorRuntime;
 }
 
 type RosterError = '' | 'load' | 'create' | 'remove';
@@ -358,6 +369,16 @@ export function AdminPeoplePanel() {
         )}
         {registry && (
           <>
+            <p className="small text-secondary">
+              {t('people.extractor.runtimeState', {
+                state: t(
+                  registry.runtime?.enabled
+                    ? 'people.extractor.state.ready'
+                    : 'people.extractor.state.unavailable',
+                ),
+                adapter: registry.runtime?.adapterId ?? '—',
+              })}
+            </p>
             <p className="small text-secondary">
               {t('people.extractor.flags', {
                 runtime: t(
