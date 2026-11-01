@@ -5,6 +5,7 @@ import type { CameraStatus, UserRole } from '../../domain/platform';
 import { useI18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/messages';
 import { AdminAccessRequestsPanel } from '../admin/AdminAccessRequestsPanel';
+import { AdminCameraConnectionPanel } from '../admin/AdminCameraConnectionPanel';
 import { AdminProfilesPanel } from '../admin/AdminProfilesPanel';
 import { AdminUsersPanel } from '../admin/AdminUsersPanel';
 import { ClipsPanel } from '../clips/ClipsPanel';
@@ -150,6 +151,11 @@ export function Dashboard({ cameras, selectedCameraId, onCameraSelect, userRole 
       {isAdmin && active === 'requests' && (
         <section id="view-requests" aria-label={t('dashboard.menu.accessRequests')}>
           <AdminAccessRequestsPanel onManageUser={manageRequestedUser} />
+        </section>
+      )}
+      {isAdmin && camera && active === 'cameras' && (
+        <section id="view-cameras" aria-label={t('dashboard.menu.cameras')}>
+          <AdminCameraConnectionPanel cameraId={camera.cameraId} />
         </section>
       )}
     </section>

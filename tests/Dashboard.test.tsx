@@ -130,6 +130,98 @@ describe('dashboard navigation', () => {
     expect(screen.queryByLabelText('Vídeo ao vivo da câmera')).not.toBeInTheDocument();
   });
 
+  it('lets only the administrator edit active camera metadata and apply a local address change', async () => {
+    const activeCamera = {
+      ...camera,
+      cameraId: 'CAM000000000001',
+      liveUrl: '/api/v1/live/CAM000000000001/index.m3u8',
+    };
+    const calls: Array<{ path: string; method: string; body?: string }> = [];
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      calls.push({ path, method, body: typeof init?.body === 'string' ? init.body : undefined });
+      if (path === '/api/v1/admin/cameras?page=1&pageSize=100')
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                cameraId: activeCamera.cameraId,
+                contextId: 'CTX000000000001',
+                name: 'Garagem',
+                isEnabled: true,
+                version: 1,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (path === `/api/v1/admin/cameras/${activeCamera.cameraId}/connection` && method === 'GET')
+        return new Response(
+          JSON.stringify({
+            cameraPublicId: activeCamera.cameraId,
+            address: '192.168.0.120',
+            isCaptureCamera: true,
+          }),
+          { status: 200 },
+        );
+      if (path === `/api/v1/admin/cameras/${activeCamera.cameraId}/connection` && method === 'PUT')
+        return new Response(
+          JSON.stringify({
+            cameraPublicId: activeCamera.cameraId,
+            address: 'camera.local',
+            isCaptureCamera: true,
+          }),
+          { status: 200 },
+        );
+      if (path === `/api/v1/admin/cameras/${activeCamera.cameraId}` && method === 'PUT')
+        return new Response(
+          JSON.stringify({
+            cameraId: activeCamera.cameraId,
+            contextId: 'CTX000000000001',
+            name: 'Portão',
+            isEnabled: true,
+            version: 2,
+          }),
+          { status: 200 },
+        );
+      throw new Error(`Unexpected request: ${method} ${path}`);
+    });
+
+    renderDashboard('Administrator', [activeCamera], activeCamera.cameraId);
+    const menu = screen.getByRole('navigation', { name: 'Navegação principal' });
+    await userEvent.setup().click(within(menu).getByRole('button', { name: 'Gestão' }));
+    await userEvent.setup().click(within(menu).getByRole('button', { name: 'Câmeras' }));
+    expect(await screen.findByRole('heading', { name: 'Configuração da câmera' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Endereço IPv4 ou hostname local da câmera')).toHaveValue('192.168.0.120');
+
+    await userEvent.setup().clear(screen.getByLabelText('Nome da câmera'));
+    await userEvent.setup().type(screen.getByLabelText('Nome da câmera'), 'Portão');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Salvar nome' }));
+    expect(await screen.findByText('Nome da câmera salvo.')).toBeInTheDocument();
+
+    await userEvent.setup().clear(screen.getByLabelText('Endereço IPv4 ou hostname local da câmera'));
+    await userEvent
+      .setup()
+      .type(screen.getByLabelText('Endereço IPv4 ou hostname local da câmera'), 'camera.local');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Aplicar endereço' }));
+    expect(
+      await screen.findByText(
+        'Endereço aplicado. O Neolink está reconectando com as credenciais existentes.',
+      ),
+    ).toBeInTheDocument();
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        path: `/api/v1/admin/cameras/${activeCamera.cameraId}/connection`,
+        method: 'PUT',
+        body: JSON.stringify({ expectedAddress: '192.168.0.120', address: 'camera.local' }),
+      }),
+    );
+    expect(calls.some((call) => call.body?.includes('password'))).toBe(false);
+  });
+
   it('loads a chronological clip page and authorized detail/playback on demand', async () => {
     const clip = {
       publicId: 'CLP000000000001',

@@ -15,6 +15,8 @@ interface ClipItem {
   sizeBytes: number | null;
   triggerReason: string | null;
   triggerConfigVersion: string | null;
+  isPreserved: boolean;
+  preservationVersion: number;
 }
 interface ClipPage {
   items: ClipItem[];
@@ -44,6 +46,8 @@ const archiveKeys: Record<string, TranslationKey> = {
   copying: 'clips.archive.copying',
   verifying: 'clips.archive.verifying',
   archived: 'clips.archive.archived',
+  expiring: 'clips.archive.expiring',
+  expired: 'clips.archive.expired',
   retry_wait: 'clips.archive.retry_wait',
   failed: 'clips.archive.failed',
 };
@@ -65,6 +69,14 @@ interface AdminCamera {
   cameraId: string;
   name: string;
   isEnabled: boolean;
+}
+interface RetentionConfiguration {
+  cameraId: string;
+  retentionDays: number;
+  maximumStorageGigabytes: number | null;
+  version: number;
+  updatedAtUtc: string | null;
+  name?: string;
 }
 type DispatchPolicy = 'always' | 'large_motion' | 'manual_only' | 'never';
 interface DispatchPolicyView {
@@ -123,6 +135,19 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
   const [policyNotice, setPolicyNotice] = useState<{ text: string; error: boolean }>();
   const [analysisBusyClip, setAnalysisBusyClip] = useState<string>();
   const [analysisNotice, setAnalysisNotice] = useState<{ clipId: string; text: string; error: boolean }>();
+  const [retentionConfigurations, setRetentionConfigurations] = useState<RetentionConfiguration[]>([]);
+  const [retentionDrafts, setRetentionDrafts] = useState<Record<string, { days: number; gigabytes: string }>>(
+    {},
+  );
+  const [retentionLoading, setRetentionLoading] = useState(false);
+  const [retentionBusyCamera, setRetentionBusyCamera] = useState<string>();
+  const [retentionNotice, setRetentionNotice] = useState<{ text: string; error: boolean }>();
+  const [preservationBusyClip, setPreservationBusyClip] = useState<string>();
+  const [preservationNotice, setPreservationNotice] = useState<{
+    clipId: string;
+    text: string;
+    error: boolean;
+  }>();
 
   const loadDispatchPolicies = useCallback(async (cameraIds: string[]) => {
     const ids = [...new Set(cameraIds.filter(Boolean))];
@@ -214,6 +239,124 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
   useEffect(() => {
     void loadTriggerConfigurations();
   }, [loadTriggerConfigurations]);
+
+  const loadRetentionConfigurations = useCallback(async () => {
+    if (!isAdmin) return;
+    setRetentionLoading(true);
+    try {
+      const catalog = await getJson<{ items: AdminCamera[] }>('/api/v1/admin/cameras?page=1&pageSize=100');
+      const settings = await Promise.all(
+        catalog.items.map(async (camera) => ({
+          ...(await getJson<RetentionConfiguration>(
+            `/api/v1/admin/cameras/${encodeURIComponent(camera.cameraId)}/clip-retention`,
+          )),
+          name: camera.name,
+        })),
+      );
+      setRetentionConfigurations(settings);
+      setRetentionDrafts(
+        Object.fromEntries(
+          settings.map((item) => [
+            item.cameraId,
+            {
+              days: item.retentionDays,
+              gigabytes: item.maximumStorageGigabytes === null ? '' : String(item.maximumStorageGigabytes),
+            },
+          ]),
+        ),
+      );
+    } catch {
+      setRetentionNotice({ text: t('clips.retention.loadError'), error: true });
+    } finally {
+      setRetentionLoading(false);
+    }
+  }, [isAdmin, t]);
+
+  useEffect(() => {
+    void loadRetentionConfigurations();
+  }, [loadRetentionConfigurations]);
+
+  async function updateRetention(setting: RetentionConfiguration) {
+    const draft = retentionDrafts[setting.cameraId];
+    if (!draft) return;
+    const gigabytes = draft.gigabytes.trim() === '' ? null : Number(draft.gigabytes);
+    if (
+      !Number.isInteger(draft.days) ||
+      draft.days < 1 ||
+      draft.days > 3650 ||
+      (gigabytes !== null && (!Number.isInteger(gigabytes) || gigabytes < 1 || gigabytes > 1024))
+    ) {
+      setRetentionNotice({ text: t('clips.retention.invalid'), error: true });
+      return;
+    }
+    setRetentionBusyCamera(setting.cameraId);
+    setRetentionNotice(undefined);
+    try {
+      const response = await request(
+        `/api/v1/admin/cameras/${encodeURIComponent(setting.cameraId)}/clip-retention`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            expectedVersion: setting.version,
+            retentionDays: draft.days,
+            maximumStorageGigabytes: gigabytes,
+          }),
+        },
+      );
+      if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
+      await loadRetentionConfigurations();
+      setRetentionNotice({ text: t('clips.retention.saved'), error: false });
+    } catch (failure) {
+      setRetentionNotice({
+        text: t(
+          failure instanceof ApiError && failure.status === 409
+            ? 'clips.retention.conflict'
+            : 'clips.retention.saveError',
+        ),
+        error: true,
+      });
+      await loadRetentionConfigurations();
+    } finally {
+      setRetentionBusyCamera(undefined);
+    }
+  }
+
+  async function togglePreservation(clip: ClipItem) {
+    setPreservationBusyClip(clip.publicId);
+    setPreservationNotice(undefined);
+    try {
+      const response = await request(`/api/v1/clips/${encodeURIComponent(clip.publicId)}/preservation`, {
+        method: 'PUT',
+        body: JSON.stringify({ expectedVersion: clip.preservationVersion, isPreserved: !clip.isPreserved }),
+      });
+      if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
+      const updated = (await response.json()) as { isPreserved: boolean; version: number };
+      const apply = (current: ClipItem): ClipItem =>
+        current.publicId === clip.publicId
+          ? { ...current, isPreserved: updated.isPreserved, preservationVersion: updated.version }
+          : current;
+      setItems((current) => current.map(apply));
+      setSelected((current) => (current ? { ...current, clip: apply(current.clip) } : current));
+      setPreservationNotice({
+        clipId: clip.publicId,
+        text: t(updated.isPreserved ? 'clips.preservation.enabled' : 'clips.preservation.disabled'),
+        error: false,
+      });
+    } catch (failure) {
+      setPreservationNotice({
+        clipId: clip.publicId,
+        text: t(
+          failure instanceof ApiError && failure.status === 409
+            ? 'clips.preservation.conflict'
+            : 'clips.preservation.error',
+        ),
+        error: true,
+      });
+      await load(page);
+    } finally {
+      setPreservationBusyClip(undefined);
+    }
+  }
 
   async function updateTrigger(setting: TriggerConfiguration) {
     setTriggerBusy(setting.cameraId);
@@ -452,6 +595,100 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
           )}
         </section>
       )}
+      {isAdmin && (
+        <section className="panel-card mb-3" aria-labelledby="clip-retention-title">
+          <h3 id="clip-retention-title" className="h6">
+            {t('clips.retention.title')}
+          </h3>
+          <p className="small text-secondary">{t('clips.retention.description')}</p>
+          {retentionNotice && (
+            <p
+              role={retentionNotice.error ? 'alert' : 'status'}
+              aria-live="polite"
+              className={retentionNotice.error ? 'error-text' : undefined}
+            >
+              {retentionNotice.text}
+            </p>
+          )}
+          {retentionLoading && (
+            <p role="status" aria-live="polite">
+              {t('clips.retention.loading')}
+            </p>
+          )}
+          <ul className="list-unstyled mb-0">
+            {retentionConfigurations.map((setting) => {
+              const draft = retentionDrafts[setting.cameraId] ?? {
+                days: setting.retentionDays,
+                gigabytes:
+                  setting.maximumStorageGigabytes === null ? '' : String(setting.maximumStorageGigabytes),
+              };
+              return (
+                <li key={setting.cameraId} className="border-top py-3">
+                  <strong>{setting.name ?? setting.cameraId}</strong>
+                  <div className="d-flex flex-wrap align-items-end gap-2 mt-2">
+                    <div>
+                      <label className="form-label" htmlFor={`clip-retention-days-${setting.cameraId}`}>
+                        {t('clips.retention.days')}
+                      </label>
+                      <input
+                        className="form-control"
+                        id={`clip-retention-days-${setting.cameraId}`}
+                        type="number"
+                        min="1"
+                        max="3650"
+                        value={draft.days}
+                        disabled={retentionBusyCamera !== undefined}
+                        onChange={(event) =>
+                          setRetentionDrafts((current) => ({
+                            ...current,
+                            [setting.cameraId]: { ...draft, days: Number(event.target.value) },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor={`clip-retention-gb-${setting.cameraId}`}>
+                        {t('clips.retention.quota')}
+                      </label>
+                      <input
+                        className="form-control"
+                        id={`clip-retention-gb-${setting.cameraId}`}
+                        type="number"
+                        min="1"
+                        max="1024"
+                        placeholder={t('clips.retention.unlimited')}
+                        value={draft.gigabytes}
+                        disabled={retentionBusyCamera !== undefined}
+                        onChange={(event) =>
+                          setRetentionDrafts((current) => ({
+                            ...current,
+                            [setting.cameraId]: { ...draft, gigabytes: event.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      disabled={
+                        retentionBusyCamera !== undefined ||
+                        (draft.days === setting.retentionDays &&
+                          (draft.gigabytes === '' ? null : Number(draft.gigabytes)) ===
+                            setting.maximumStorageGigabytes)
+                      }
+                      onClick={() => void updateRetention(setting)}
+                    >
+                      {retentionBusyCamera === setting.cameraId
+                        ? t('clips.retention.saving')
+                        : t('clips.retention.save')}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {(cameraId || dispatchPolicies.length > 0 || policyLoading || policyLoadErrors.length > 0) && (
         <section className="panel-card mb-3" aria-labelledby="clip-policy-title">
           <h3 id="clip-policy-title" className="h6">
@@ -616,6 +853,9 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
                   <span>
                     {t('clips.analysis')}: {t(analysisKeys[clip.analysisStatus] ?? 'clips.unknown')}
                   </span>
+                  {clip.isPreserved && (
+                    <span className="badge text-bg-warning">{t('clips.preservation.preserved')}</span>
+                  )}
                 </div>
                 <div className="d-flex flex-wrap align-items-start gap-2">
                   <button
@@ -626,6 +866,18 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
                     {t('clips.details')}
                   </button>
                   {renderAnalysisAction(clip)}
+                  {isAdmin && clip.state === 'ready' && clip.archiveStatus === 'archived' && (
+                    <button
+                      className="btn btn-outline-secondary"
+                      type="button"
+                      disabled={preservationBusyClip !== undefined}
+                      onClick={() => void togglePreservation(clip)}
+                    >
+                      {preservationBusyClip === clip.publicId
+                        ? t('clips.preservation.saving')
+                        : t(clip.isPreserved ? 'clips.preservation.release' : 'clips.preservation.preserve')}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -678,6 +930,33 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
             <dd>{formatDate(selected.updatedAtUtc)}</dd>
           </dl>
           {renderAnalysisAction(selected.clip)}
+          {isAdmin && selected.clip.state === 'ready' && selected.clip.archiveStatus === 'archived' && (
+            <div className="mt-2">
+              <button
+                className="btn btn-outline-secondary"
+                type="button"
+                disabled={preservationBusyClip !== undefined}
+                onClick={() => void togglePreservation(selected.clip)}
+              >
+                {preservationBusyClip === selected.clip.publicId
+                  ? t('clips.preservation.saving')
+                  : t(
+                      selected.clip.isPreserved
+                        ? 'clips.preservation.release'
+                        : 'clips.preservation.preserve',
+                    )}
+              </button>
+              {preservationNotice?.clipId === selected.clip.publicId && (
+                <p
+                  role={preservationNotice.error ? 'alert' : 'status'}
+                  aria-live="polite"
+                  className={preservationNotice.error ? 'error-text' : undefined}
+                >
+                  {preservationNotice.text}
+                </p>
+              )}
+            </div>
+          )}
           {selected.mediaUrl && (
             <>
               <p className="small text-secondary">{t('clips.captionsUnavailable')}</p>

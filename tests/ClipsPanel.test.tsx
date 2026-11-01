@@ -13,6 +13,45 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it('renders timeline thumbnails in the bounded thumbnail style', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    json({
+      items: [
+        {
+          publicId: 'CLP000000000001',
+          cameraId: 'CAM000000000001',
+          startedAtUtc: '2026-10-31T00:00:00Z',
+          endedAtUtc: '2026-10-31T00:00:10Z',
+          state: 'ready',
+          archiveStatus: 'not_requested',
+          analysisStatus: 'not_requested',
+          thumbnailUrl: '/api/v1/clips/CLP000000000001/thumbnail',
+          sizeBytes: 1024,
+          triggerReason: null,
+          triggerConfigVersion: null,
+        },
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+    }),
+  );
+
+  const { container } = render(
+    <I18nProvider>
+      <ClipsPanel />
+    </I18nProvider>,
+  );
+
+  await screen.findByRole('button', { name: 'Detalhes e reprodução' });
+  const thumbnail = container.querySelector('img.clip-thumbnail');
+  expect(thumbnail).not.toBeNull();
+  if (!thumbnail) throw new Error('Timeline thumbnail was not rendered');
+  expect(thumbnail).toHaveAttribute('src', '/api/v1/clips/CLP000000000001/thumbnail');
+  expect(thumbnail).toHaveClass('clip-thumbnail');
+  expect(thumbnail?.parentElement).toHaveClass('clip-timeline-item');
+});
+
 it('lets an administrator configure the selected per-camera trigger with versioned API updates', async () => {
   let enabled = false;
   let version = 0;
@@ -26,6 +65,13 @@ it('lets an administrator configure the selected per-camera trigger with version
       return json({ items: [{ cameraId: 'CAM000000000001', name: 'Garage', isEnabled: true }] });
     if (path === '/api/v1/admin/cameras/CAM000000000001/clip-trigger' && method === 'GET')
       return json({ cameraId: 'CAM000000000001', enabled, version, updatedAtUtc: '2026-10-31T00:00:00Z' });
+    if (path === '/api/v1/admin/cameras/CAM000000000001/clip-retention' && method === 'GET')
+      return json({
+        cameraId: 'CAM000000000001',
+        retentionDays: 15,
+        maximumStorageGigabytes: null,
+        version: 0,
+      });
     if (path === '/api/v1/admin/cameras/CAM000000000001/clip-trigger' && method === 'PUT') {
       const body = JSON.parse(String(init?.body));
       expect(body.expectedVersion).toBe(version);
@@ -64,6 +110,80 @@ it('does not request or expose trigger configuration for non-administrators', as
   );
   expect(await screen.findByText('Nenhum clipe corresponde aos filtros.')).toBeInTheDocument();
   expect(screen.queryByText('Geração automática de clipes')).not.toBeInTheDocument();
+});
+
+it('saves per-camera retention settings and preserves a clip through versioned administrator actions', async () => {
+  const clip = {
+    publicId: 'CLP000000000001',
+    cameraId: 'CAM000000000001',
+    startedAtUtc: '2026-10-01T00:00:00Z',
+    endedAtUtc: '2026-10-01T00:00:10Z',
+    state: 'ready',
+    archiveStatus: 'archived',
+    analysisStatus: 'not_requested',
+    thumbnailUrl: null,
+    sizeBytes: 1200,
+    triggerReason: null,
+    triggerConfigVersion: null,
+    isPreserved: false,
+    preservationVersion: 0,
+  };
+  let retentionVersion = 0;
+  let preserved = false;
+  const requests: Array<{ path: string; method: string; body?: string }> = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = init?.method ?? 'GET';
+    requests.push({ path, method, body: init?.body ? String(init.body) : undefined });
+    if (path.startsWith('/api/v1/clips?')) return json({ items: [clip], page: 1, pageSize: 20, total: 1 });
+    if (path.startsWith('/api/v1/admin/cameras?'))
+      return json({ items: [{ cameraId: clip.cameraId, name: 'Garage', isEnabled: true }] });
+    if (path.endsWith('/clip-trigger'))
+      return json({ cameraId: clip.cameraId, enabled: false, version: 0, updatedAtUtc: null });
+    if (path.endsWith('/clip-retention') && method === 'GET')
+      return json({
+        cameraId: clip.cameraId,
+        retentionDays: 15,
+        maximumStorageGigabytes: null,
+        version: retentionVersion,
+      });
+    if (path.endsWith('/clip-retention') && method === 'PUT') {
+      const body = JSON.parse(String(init?.body));
+      expect(body.expectedVersion).toBe(retentionVersion);
+      retentionVersion++;
+      return json({
+        cameraId: clip.cameraId,
+        retentionDays: body.retentionDays,
+        maximumStorageGigabytes: body.maximumStorageGigabytes,
+        version: retentionVersion,
+      });
+    }
+    if (path.endsWith('/preservation') && method === 'PUT') {
+      const body = JSON.parse(String(init?.body));
+      expect(body.expectedVersion).toBe(clip.preservationVersion);
+      preserved = body.isPreserved;
+      clip.isPreserved = preserved;
+      clip.preservationVersion++;
+      return json({ clipPublicId: clip.publicId, isPreserved: preserved, version: clip.preservationVersion });
+    }
+    throw new Error(`Unexpected request: ${method} ${path}`);
+  });
+  const user = userEvent.setup();
+  render(
+    <I18nProvider>
+      <ClipsPanel isAdmin />
+    </I18nProvider>,
+  );
+  await user.clear(await screen.findByLabelText('Retenção (dias)'));
+  await user.type(screen.getByLabelText('Retenção (dias)'), '30');
+  await user.type(screen.getByLabelText('Limite do arquivo (GB)'), '50');
+  await user.click(screen.getByRole('button', { name: 'Salvar limites' }));
+  expect(await screen.findByText('Configurações de retenção salvas.')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Preservar clipe' }));
+  expect(await screen.findByText('Preservado')).toBeInTheDocument();
+  expect(requests.some((item) => item.method === 'PUT' && item.path.endsWith('/clip-retention'))).toBe(true);
+  expect(requests.some((item) => item.method === 'PUT' && item.path.endsWith('/preservation'))).toBe(true);
+  expect(preserved).toBe(true);
 });
 
 it('loads persisted policy, saves it with optimistic version, and submits analysis by public clip id', async () => {

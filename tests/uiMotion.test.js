@@ -5,6 +5,16 @@ import { describe, expect, it } from 'vitest';
 const stylesheet = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
 describe('UI motion accessibility contract', () => {
+  it('bounds timeline thumbnails so intrinsic image dimensions cannot expand the clip list', () => {
+    expect(stylesheet).toMatch(
+      /\.clip-thumbnail\s*\{[^}]*flex: 0 0 7rem;[^}]*height: 3\.9375rem;[^}]*width: 7rem;/s,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 575\.98px\)[\s\S]*?\.clip-thumbnail\s*\{[^}]*height: 2\.8125rem;[^}]*width: 5rem;/,
+    );
+    expect(stylesheet).toContain('object-fit: cover;');
+  });
+
   it('provides lightweight feedback for common controls and panel entry', () => {
     expect(stylesheet).toContain('.btn:hover:not(:disabled)');
     expect(stylesheet).toContain('.view-tab:hover:not([aria-current="page"])');
