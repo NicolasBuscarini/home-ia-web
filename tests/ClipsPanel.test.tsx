@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ClipsPanel } from '../src/features/clips/ClipsPanel';
@@ -262,4 +262,51 @@ it('loads persisted policy, saves it with optimistic version, and submits analys
   ).toBe(true);
   const postBody = JSON.parse(requests.find((item) => item.method === 'POST')?.body ?? '{}');
   expect(postBody.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+});
+
+it('reports an unplayable clip and offers a retry instead of failing silently', async () => {
+  const clip = {
+    publicId: 'CLP000000000002',
+    cameraId: 'CAM000000000001',
+    startedAtUtc: '2026-10-01T00:00:00Z',
+    endedAtUtc: '2026-10-01T00:00:10Z',
+    state: 'ready',
+    archiveStatus: 'archived',
+    analysisStatus: 'not_requested',
+    thumbnailUrl: null,
+    sizeBytes: 2048,
+    triggerReason: null,
+    triggerConfigVersion: null,
+  };
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const path = String(input);
+    if (path.startsWith('/api/v1/clips?')) return json({ items: [clip], page: 1, pageSize: 20, total: 1 });
+    if (path === `/api/v1/clips/${clip.publicId}`)
+      return json({
+        clip,
+        mediaUrl: `/api/v1/clips/${clip.publicId}/media`,
+        mediaSha256: 'a'.repeat(64),
+        thumbnailSha256: null,
+        attemptCount: 1,
+        updatedAtUtc: '2026-10-01T00:00:10Z',
+      });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const user = userEvent.setup();
+  const { container } = render(
+    <I18nProvider>
+      <ClipsPanel />
+    </I18nProvider>,
+  );
+
+  await user.click(await screen.findByRole('button', { name: 'Detalhes e reprodução' }));
+  const video = await screen.findByText('Seu navegador não consegue reproduzir este formato de vídeo.');
+  expect(screen.queryByText(/Não foi possível reproduzir o clipe/)).not.toBeInTheDocument();
+
+  fireEvent.error(video);
+  expect(await screen.findByText(/Não foi possível reproduzir o clipe/)).toBeInTheDocument();
+  const before = container.querySelector('video');
+  await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+  expect(screen.queryByText(/Não foi possível reproduzir o clipe/)).not.toBeInTheDocument();
+  expect(container.querySelector('video')).not.toBe(before);
 });

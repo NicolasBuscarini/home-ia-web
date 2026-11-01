@@ -257,6 +257,9 @@ const enUS = {
   'clips.unknown': 'Not available',
   'clips.videoFallback': 'Your browser cannot play this video format.',
   'clips.captionsUnavailable': 'Captions are not available for this clip.',
+  'clips.playback.error':
+    'The clip could not be played. The server may still be preparing the playable copy; try again in a moment.',
+  'clips.playback.retry': 'Try again',
   'clips.mediaUnavailable': 'Media is unavailable or failed integrity validation.',
   'clips.error.load': 'Could not load clips. Try again.',
   'clips.error.detail': 'Could not load clip details or playback.',
@@ -926,6 +929,9 @@ const ptBR: Record<TranslationKey, string> = {
   'clips.unknown': 'Não disponível',
   'clips.videoFallback': 'Seu navegador não consegue reproduzir este formato de vídeo.',
   'clips.captionsUnavailable': 'Não há legendas disponíveis para este clipe.',
+  'clips.playback.error':
+    'Não foi possível reproduzir o clipe. O servidor pode ainda estar preparando a cópia reproduzível; tente novamente em instantes.',
+  'clips.playback.retry': 'Tentar novamente',
   'clips.mediaUnavailable': 'Mídia indisponível ou falha na validação de integridade.',
   'clips.error.load': 'Não foi possível carregar os clipes. Tente novamente.',
   'clips.error.detail': 'Não foi possível carregar detalhes ou reproduzir o clipe.',

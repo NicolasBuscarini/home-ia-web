@@ -120,6 +120,8 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [selected, setSelected] = useState<ClipDetails>();
+  const [playbackError, setPlaybackError] = useState(false);
+  const [playbackAttempt, setPlaybackAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [triggerConfigurations, setTriggerConfigurations] = useState<TriggerConfiguration[]>([]);
@@ -523,6 +525,8 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
 
   async function openClip(clipId: string) {
     setSelected(undefined);
+    setPlaybackError(false);
+    setPlaybackAttempt(0);
     setError('');
     try {
       setSelected(await getJson<ClipDetails>(`/api/v1/clips/${encodeURIComponent(clipId)}`));
@@ -961,9 +965,32 @@ export function ClipsPanel({ cameraId, isAdmin = false }: { cameraId?: string; i
             <>
               <p className="small text-secondary">{t('clips.captionsUnavailable')}</p>
               {/* biome-ignore lint/a11y/useMediaCaption: The clip contract has no caption track; explicitly disclose this limitation. */}
-              <video className="clip-video" controls preload="metadata" src={selected.mediaUrl}>
+              <video
+                key={`${selected.clip.publicId}-${playbackAttempt}`}
+                className="clip-video"
+                controls
+                preload="metadata"
+                src={selected.mediaUrl}
+                onError={() => setPlaybackError(true)}
+                onLoadedMetadata={() => setPlaybackError(false)}
+              >
                 {t('clips.videoFallback')}
               </video>
+              {playbackError && (
+                <div className="error-text mt-2" role="alert">
+                  <p>{t('clips.playback.error')}</p>
+                  <button
+                    className="btn btn-outline-secondary btn-sm"
+                    type="button"
+                    onClick={() => {
+                      setPlaybackError(false);
+                      setPlaybackAttempt((current) => current + 1);
+                    }}
+                  >
+                    {t('clips.playback.retry')}
+                  </button>
+                </div>
+              )}
             </>
           )}
           {!selected.mediaUrl && <p role="status">{t('clips.mediaUnavailable')}</p>}
