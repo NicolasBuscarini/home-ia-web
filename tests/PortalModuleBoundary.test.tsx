@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import { I18nProvider } from 'home-ia-shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n/i18n';
 import { PortalModuleBoundary } from '../src/portal/PortalModuleBoundary';
 
 afterEach(() => cleanup());

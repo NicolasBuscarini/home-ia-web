@@ -1,5 +1,5 @@
+import { getJson, request } from 'home-ia-shared';
 import { describe, expect, it, vi } from 'vitest';
-import { getJson, request } from '../src/services/http';
 
 describe('same-origin HTTP client', () => {
   it('uses the session cookie, disables caching, and sends JSON headers for a body', async () => {

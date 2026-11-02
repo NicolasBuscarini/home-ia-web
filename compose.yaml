@@ -5,7 +5,9 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+      - ../home-ia-shared:/home-ia-shared
       - web_node_modules:/workspace/node_modules
+      - shared_node_modules:/home-ia-shared/node_modules
     environment:
       NPM_CONFIG_CACHE: /tmp/npm-cache
       CI: "true"
@@ -13,7 +15,29 @@ services:
       - /tmp:size=256m,mode=1777
     security_opt:
       - no-new-privileges:true
-    command: sh -lc 'npm ci && npm run verify'
+    command: sh -lc 'cd /home-ia-shared && npm ci --omit=peer && npm run build && cd /workspace && npm ci && npm run verify'
+
+  federation:
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
+    profiles: [federation]
+    network_mode: host
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ../home-ia-monitoring-web:/remote
+      - ../home-ia-shared:/home-ia-shared
+      - web_node_modules:/workspace/node_modules
+      - monitoring_web_node_modules:/remote/node_modules
+      - shared_node_modules:/home-ia-shared/node_modules
+    environment:
+      CI: "true"
+      FEDERATION_BASE_URL: http://127.0.0.1:5183
+      VITE_MONITORING_REMOTE_URL: http://127.0.0.1:5184/remoteEntry.js
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    command: sh -lc 'set -e; cd /home-ia-shared && npm ci --omit=peer && npm run build; cd /remote && npm ci && npm run build; cd /workspace && npm ci && VITE_MONITORING_REMOTE_URL=http://127.0.0.1:5184/remoteEntry.js npm run build; (cd /remote && npm run preview -- --port 5184 --strictPort >/tmp/remote.log 2>&1 &); (cd /workspace && npm run preview -- --port 5183 --strictPort >/tmp/shell.log 2>&1 &); node -e "const wait=async()=>{for(let i=0;i<60;i++){try{const [a,b]=await Promise.all([fetch(\"http://127.0.0.1:5183\"),fetch(\"http://127.0.0.1:5184/remoteEntry.js\")]);if(a.ok&&b.ok)return;}catch{} await new Promise(r=>setTimeout(r,1000));} throw new Error(\"preview timeout\")}; wait()"; npx playwright test --config=playwright.federation.config.ts'
 
   ct02:
     image: mcr.microsoft.com/playwright:v1.56.1-noble
@@ -22,13 +46,17 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+      - ../home-ia-shared:/home-ia-shared
+      - shared_node_modules:/home-ia-shared/node_modules
     environment:
       CI: "true"
       CT02_BASE_URL: ${CT02_BASE_URL:-http://127.0.0.1:5173}
       CT02_USERNAME: ${CT02_USERNAME:-}
       CT02_PASSWORD: ${CT02_PASSWORD:-}
       CT02_DURATION_SECONDS: ${CT02_DURATION_SECONDS:-600}
-    command: sh -lc 'npm ci && npm run test:ct02'
+    command: sh -lc 'cd /home-ia-shared && npm ci --omit=peer && npm run build && cd /workspace && npm ci && npm run test:ct02'
 
 volumes:
   web_node_modules:
+  shared_node_modules:
+  monitoring_web_node_modules:

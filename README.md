@@ -2,13 +2,13 @@
 
 Frontend React/TypeScript do **Home IA**, mantido neste repositório independente e integrado à API `garage-watch-platform`.
 
-## Portal (T16-D parcial)
+## Portal (T16-D concluída no escopo local)
 
 A UI atual passou a consumir a projeção do portal: após autenticar, busca `GET /api/v1/portal/navigation` para decidir quais módulos/grupos de menu exibir e `GET /api/v1/portal/preferences` para aplicar tema/idioma persistidos; mudanças de tema/idioma são enviadas por `PUT /api/v1/portal/preferences`. O painel de monitoramento é montado atrás de `PortalModuleBoundary`, que contém falhas do módulo sem derrubar o cabeçalho/menu do portal. A marca visível e o título passam a ser **Home IA**; o código de monitoramento continua no mesmo bundle e repositório nesta fase.
 
 O shell carrega o módulo de Monitoramento por **Module Federation** a partir de `home-ia-monitoring-web` (`VITE_MONITORING_REMOTE_URL`, default `http://127.0.0.1:5174/remoteEntry.js`). O código de monitoramento foi removido do shell e os testes de domínio foram movidos para o remote; uma falha de carregamento mostra o estado de módulo indisponível do `PortalModuleBoundary`. A autorização continua no servidor.
 
-Esta é uma composição federada real, mas ainda em migração: o remote reutiliza cópias de utilitários/estilos, não há um pacote compartilhado definitivo e a renomeação do repositório pertence a `T16-F`. A inspeção visual/browser do carregamento remoto e a validação de a11y/CT02 continuam pendentes. `T16-D` não está concluída nessa escala enquanto esses pontos e a renomeação não forem aceitos. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
+A composição federada usa `home-ia-shared` para i18n, tema, HTTP, tipos, `StatusBadge` e CSS global, compartilhado como singleton. `./garage test-federation-web` builda shared/remote/shell, sobe previews isolados e valida o carregamento em Chromium com axe WCAG 2.0 A/AA (sem contraste) e teclado. A inspeção visual manual em dispositivos, contraste e CT02 continuam pendentes. A renomeação do repositório GitHub/submodule/URLs pertence a `T16-F`. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
 
 ## Tecnologias
 

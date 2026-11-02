@@ -1,7 +1,6 @@
+import type { TranslationKey } from 'home-ia-shared';
+import { THEMES, type ThemeId, useI18n } from 'home-ia-shared';
 import { useRef } from 'react';
-import { useI18n } from '../i18n/i18n';
-import type { TranslationKey } from '../i18n/messages';
-import { THEMES, type ThemeId } from '../theme/theme';
 
 interface ThemeSelectorProps {
   value: ThemeId;

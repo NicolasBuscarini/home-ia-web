@@ -1,5 +1,5 @@
+import { useI18n } from 'home-ia-shared';
 import { Component, type ReactNode } from 'react';
-import { useI18n } from '../i18n/i18n';
 
 interface ErrorBoundaryProps {
   fallback: ReactNode;

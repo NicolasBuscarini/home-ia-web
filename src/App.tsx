@@ -1,14 +1,24 @@
+import type { AuthenticatedUser, CameraStatus, UserRole } from 'home-ia-shared';
+import {
+  ApiError,
+  applyTheme,
+  getJson,
+  I18nProvider,
+  isLocale,
+  isThemeId,
+  postJson,
+  readSavedTheme,
+  request,
+  type ThemeId,
+  useI18n,
+} from 'home-ia-shared';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AppHeader } from './components/AppHeader';
-import type { AuthenticatedUser, CameraStatus, UserRole } from './domain/platform';
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
-import { I18nProvider, isLocale, useI18n } from './i18n/i18n';
 import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
 import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
 import { getOrCreateClientId } from './services/clientIdentity';
-import { ApiError, getJson, postJson, request } from './services/http';
-import { applyTheme, isThemeId, readSavedTheme, type ThemeId } from './theme/theme';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
 

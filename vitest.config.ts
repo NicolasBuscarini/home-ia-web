@@ -4,8 +4,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
+      'home-ia-shared': path.resolve(__dirname, '../home-ia-shared/src/index.ts'),
       'monitoring/MonitoringModule': path.resolve(__dirname, 'tests/monitoringModuleStub.tsx'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   test: {
     environment: 'jsdom',

@@ -1,4 +1,4 @@
-import type { CameraStatus, UserRole } from '../domain/platform';
+import type { CameraStatus, UserRole } from 'home-ia-shared';
 
 export interface MonitoringModuleProps {
   locale: string;

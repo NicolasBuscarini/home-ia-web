@@ -1,5 +1,5 @@
+import { applyTheme, DEFAULT_THEME, readSavedTheme } from 'home-ia-shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyTheme, DEFAULT_THEME, readSavedTheme } from '../src/theme/theme';
 
 describe('theme preference', () => {
   beforeEach(() => {

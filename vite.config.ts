@@ -5,8 +5,14 @@ import { defineConfig, loadEnv } from 'vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', 'VITE_');
   const target = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8081';
-  const monitoringRemote = env.VITE_MONITORING_REMOTE_URL || 'http://127.0.0.1:5174/remoteEntry.js';
+  const monitoringRemote =
+    process.env.VITE_MONITORING_REMOTE_URL ||
+    env.VITE_MONITORING_REMOTE_URL ||
+    'http://127.0.0.1:5174/remoteEntry.js';
   return {
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
     plugins: [
       react(),
       federation({
@@ -20,7 +26,7 @@ export default defineConfig(({ mode }) => {
             shareScope: 'default',
           },
         },
-        shared: ['react', 'react-dom'],
+        shared: ['react', 'react-dom', 'home-ia-shared'],
         dts: false,
       }),
     ],
@@ -33,6 +39,12 @@ export default defineConfig(({ mode }) => {
         '/api': { target, changeOrigin: false },
         '/health': { target, changeOrigin: false },
       },
+    },
+    preview: {
+      host: '0.0.0.0',
+      port: 5173,
+      strictPort: true,
+      cors: true,
     },
     build: {
       outDir: 'dist',

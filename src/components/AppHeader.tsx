@@ -1,7 +1,5 @@
-import type { UserRole } from '../domain/platform';
-import { useI18n } from '../i18n/i18n';
-import { LOCALES, type Locale } from '../i18n/messages';
-import type { ThemeId } from '../theme/theme';
+import type { ThemeId, UserRole } from 'home-ia-shared';
+import { LOCALES, type Locale, useI18n } from 'home-ia-shared';
 import { ThemeSelector } from './ThemeSelector';
 
 interface AppHeaderProps {

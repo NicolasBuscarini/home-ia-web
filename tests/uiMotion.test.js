@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const stylesheet = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+const stylesheet = readFileSync(resolve(process.cwd(), '../home-ia-shared/src/styles.css'), 'utf8');
 
 describe('UI motion accessibility contract', () => {
   it('bounds timeline thumbnails so intrinsic image dimensions cannot expand the clip list', () => {

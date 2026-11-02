@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@fontsource-variable/inter';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import './styles.css';
+import 'home-ia-shared/styles.css';
+import { applyTheme, readSavedTheme } from 'home-ia-shared';
 import App from './App';
-import { applyTheme, readSavedTheme } from './theme/theme';
 
 applyTheme(readSavedTheme());
 

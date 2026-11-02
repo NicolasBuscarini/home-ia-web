@@ -1,4 +1,4 @@
-import { getJson, request } from '../services/http';
+import { getJson, request } from 'home-ia-shared';
 
 export interface PortalNavigationModule {
   moduleId: string;

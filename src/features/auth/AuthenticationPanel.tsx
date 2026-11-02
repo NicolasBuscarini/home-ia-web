@@ -1,6 +1,5 @@
+import { postJson, safeApiMessage, useI18n } from 'home-ia-shared';
 import { type FormEvent, useState } from 'react';
-import { useI18n } from '../../i18n/i18n';
-import { postJson, safeApiMessage } from '../../services/http';
 
 type AuthMode = 'login' | 'register';
 
