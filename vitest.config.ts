@@ -4,10 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      'monitoring/MonitoringModule': path.resolve(
-        __dirname,
-        'src/features/monitoring/MonitoringModuleFallback.tsx',
-      ),
+      'monitoring/MonitoringModule': path.resolve(__dirname, 'tests/monitoringModuleStub.tsx'),
     },
   },
   test: {

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -100,13 +100,8 @@ describe('portal shell integration', () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     expect(screen.getByRole('combobox', { name: /Language|Idioma/ })).toHaveValue('en-US');
 
-    const menu = await screen.findByRole('navigation', {
-      name: /Main navigation|Navegação principal/,
-    });
-    expect(within(menu).getByRole('button', { name: /Monitoring|Monitoramento/ })).toBeInTheDocument();
-    expect(within(menu).getByRole('button', { name: /Clips|Clipes/ })).toBeInTheDocument();
-    expect(within(menu).queryByRole('button', { name: /System|Sistema/ })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole('button', { name: /Management|Gestão/ })).not.toBeInTheDocument();
+    const module = await screen.findByTestId('monitoring-module');
+    expect(module).toHaveAttribute('data-module-ids', 'monitoring');
   });
 
   it('persists theme and language changes through the portal API', async () => {
@@ -116,11 +111,8 @@ describe('portal shell integration', () => {
     const user = userEvent.setup();
     await screen.findByText('admin', { selector: '.user-identity-name' });
 
-    const menu = await screen.findByRole('navigation', {
-      name: /Main navigation|Navegação principal/,
-    });
-    expect(within(menu).getByRole('button', { name: /System|Sistema/ })).toBeInTheDocument();
-    expect(within(menu).getByRole('button', { name: /Management|Gestão/ })).toBeInTheDocument();
+    const module = await screen.findByTestId('monitoring-module');
+    expect(module).toHaveAttribute('data-module-ids', 'monitoring,administration');
 
     await user.click(screen.getByText(/Bosque|Forest/, { selector: 'strong' }));
     await user.click(screen.getByRole('button', { name: /Use Claro theme|Usar o tema Claro/ }));

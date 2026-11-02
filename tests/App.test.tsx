@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -132,12 +132,7 @@ describe('application shell', () => {
     expect(clientIds[1]).toBe(firstTabId);
   });
 
-  it('renders the authorized camera collection and lets the operator choose one live view', async () => {
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoView,
-    });
+  it('mounts the remote monitoring module with the authorized camera collection', async () => {
     let authenticated = false;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input);
@@ -181,20 +176,11 @@ describe('application shell', () => {
     expect(clientIndicator.querySelector('.client-count-value')).toHaveTextContent('1');
     expect(clientIndicator).not.toHaveTextContent('cliente conectado');
 
-    const first = await screen.findByRole('button', { name: /garage-01/ });
-    const second = screen.getByRole('button', { name: /side-entry/ });
-    await screen.findByLabelText('Vídeo ao vivo da câmera');
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
-    expect(first).toHaveAttribute('aria-pressed', 'true');
-    expect(second).toHaveAttribute('aria-pressed', 'false');
-    expect(within(second).getByRole('status')).toHaveTextContent('Reconectando');
-    await user.click(second);
-    await waitFor(() => expect(second).toHaveAttribute('aria-pressed', 'true'));
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(second).toHaveAttribute('aria-pressed', 'true');
-    expect(first).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getAllByLabelText('Vídeo ao vivo da câmera')).toHaveLength(1);
+    const module = await screen.findByTestId('monitoring-module');
+    expect(within(module).getByText('Administrator')).toBeInTheDocument();
+    expect(within(module).getByRole('button', { name: 'garage-01' })).toBeInTheDocument();
+    expect(within(module).getByRole('button', { name: 'side-entry' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Vídeo ao vivo da câmera')).not.toBeInTheDocument();
   });
 
   it('shows retry feedback when the initial same-origin session call fails', async () => {

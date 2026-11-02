@@ -3,7 +3,6 @@ import { AppHeader } from './components/AppHeader';
 import type { AuthenticatedUser, CameraStatus, UserRole } from './domain/platform';
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
-import MonitoringModuleFallback from './features/monitoring/MonitoringModuleFallback';
 import { I18nProvider, isLocale, useI18n } from './i18n/i18n';
 import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
 import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
@@ -285,19 +284,7 @@ function AppContent() {
         <UserLanding canRequestAccess={role === 'User'} />
       )}
       {screen === 'authenticated' && role && canMonitor && (
-        <PortalModuleBoundary
-          moduleId="monitoring"
-          fallback={
-            <MonitoringModuleFallback
-              locale={locale}
-              cameras={cameras}
-              selectedCameraId={selectedCamera?.cameraId}
-              onCameraSelect={setSelectedCameraId}
-              userRole={role}
-              portalModuleIds={portalModuleIds}
-            />
-          }
-        >
+        <PortalModuleBoundary moduleId="monitoring">
           <Suspense
             fallback={
               <section className="panel-card feedback-panel" role="status" aria-live="polite">
