@@ -100,7 +100,9 @@ describe('portal shell integration', () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     expect(screen.getByRole('combobox', { name: /Language|Idioma/ })).toHaveValue('en-US');
 
-    const menu = screen.getByRole('navigation', { name: /Main navigation|Navegação principal/ });
+    const menu = await screen.findByRole('navigation', {
+      name: /Main navigation|Navegação principal/,
+    });
     expect(within(menu).getByRole('button', { name: /Monitoring|Monitoramento/ })).toBeInTheDocument();
     expect(within(menu).getByRole('button', { name: /Clips|Clipes/ })).toBeInTheDocument();
     expect(within(menu).queryByRole('button', { name: /System|Sistema/ })).not.toBeInTheDocument();
@@ -114,7 +116,9 @@ describe('portal shell integration', () => {
     const user = userEvent.setup();
     await screen.findByText('admin', { selector: '.user-identity-name' });
 
-    const menu = screen.getByRole('navigation', { name: /Main navigation|Navegação principal/ });
+    const menu = await screen.findByRole('navigation', {
+      name: /Main navigation|Navegação principal/,
+    });
     expect(within(menu).getByRole('button', { name: /System|Sistema/ })).toBeInTheDocument();
     expect(within(menu).getByRole('button', { name: /Management|Gestão/ })).toBeInTheDocument();
 

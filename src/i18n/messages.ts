@@ -5,6 +5,7 @@ const enUS = {
   'app.brand.local': 'LOCAL',
   'app.title': 'Monitoring',
   'app.metaDescription': 'Local Home IA residential portal',
+  'portal.module.loading': 'Loading module…',
   'portal.module.error.eyebrow': 'PORTAL MODULE',
   'portal.module.error.title': 'Module unavailable',
   'portal.module.error.message':
@@ -685,6 +686,7 @@ const ptBR: Record<TranslationKey, string> = {
   'app.brand.local': 'LOCAL',
   'app.title': 'Monitoramento',
   'app.metaDescription': 'Portal residencial local Home IA',
+  'portal.module.loading': 'Carregando módulo…',
   'portal.module.error.eyebrow': 'MÓDULO DO PORTAL',
   'portal.module.error.title': 'Módulo indisponível',
   'portal.module.error.message':

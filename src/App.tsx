@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AppHeader } from './components/AppHeader';
 import type { AuthenticatedUser, CameraStatus, UserRole } from './domain/platform';
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
-import { Dashboard } from './features/monitoring/Dashboard';
+import MonitoringModuleFallback from './features/monitoring/MonitoringModuleFallback';
 import { I18nProvider, isLocale, useI18n } from './i18n/i18n';
 import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
 import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
@@ -12,6 +12,8 @@ import { ApiError, getJson, postJson, request } from './services/http';
 import { applyTheme, isThemeId, readSavedTheme, type ThemeId } from './theme/theme';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
+
+const RemoteMonitoringModule = lazy(() => import('monitoring/MonitoringModule'));
 
 function validateRole(role: string): role is UserRole {
   return ['Administrator', 'Viewer', 'User'].includes(role);
@@ -283,14 +285,36 @@ function AppContent() {
         <UserLanding canRequestAccess={role === 'User'} />
       )}
       {screen === 'authenticated' && role && canMonitor && (
-        <PortalModuleBoundary moduleId="monitoring">
-          <Dashboard
-            cameras={cameras}
-            selectedCameraId={selectedCamera?.cameraId}
-            onCameraSelect={setSelectedCameraId}
-            userRole={role}
-            portalModuleIds={portalModuleIds}
-          />
+        <PortalModuleBoundary
+          moduleId="monitoring"
+          fallback={
+            <MonitoringModuleFallback
+              locale={locale}
+              cameras={cameras}
+              selectedCameraId={selectedCamera?.cameraId}
+              onCameraSelect={setSelectedCameraId}
+              userRole={role}
+              portalModuleIds={portalModuleIds}
+            />
+          }
+        >
+          <Suspense
+            fallback={
+              <section className="panel-card feedback-panel" role="status" aria-live="polite">
+                <span className="eyebrow">{t('portal.module.error.eyebrow')}</span>
+                <p className="mb-0 mt-2">{t('portal.module.loading')}</p>
+              </section>
+            }
+          >
+            <RemoteMonitoringModule
+              locale={locale}
+              cameras={cameras}
+              selectedCameraId={selectedCamera?.cameraId}
+              onCameraSelect={setSelectedCameraId}
+              userRole={role}
+              portalModuleIds={portalModuleIds}
+            />
+          </Suspense>
         </PortalModuleBoundary>
       )}
       {screen === 'error' && (

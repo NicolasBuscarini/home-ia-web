@@ -1,5 +1,5 @@
 {
-  "name": "garage-watch-web",
+  "name": "home-ia-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
+    "@module-federation/vite": "1.23.7",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.8",

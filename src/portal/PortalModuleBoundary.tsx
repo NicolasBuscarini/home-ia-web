@@ -22,16 +22,26 @@ class PortalErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-export function PortalModuleBoundary({ moduleId, children }: { moduleId: string; children: ReactNode }) {
+export function PortalModuleBoundary({
+  moduleId,
+  fallback,
+  children,
+}: {
+  moduleId: string;
+  fallback?: ReactNode;
+  children: ReactNode;
+}) {
   const { t } = useI18n();
   return (
     <PortalErrorBoundary
       fallback={
-        <section className="panel-card feedback-panel" role="alert" aria-live="assertive">
-          <span className="eyebrow">{t('portal.module.error.eyebrow')}</span>
-          <h2 className="h5 mt-2">{t('portal.module.error.title')}</h2>
-          <p className="small text-secondary mb-0">{t('portal.module.error.message', { moduleId })}</p>
-        </section>
+        fallback ?? (
+          <section className="panel-card feedback-panel" role="alert" aria-live="assertive">
+            <span className="eyebrow">{t('portal.module.error.eyebrow')}</span>
+            <h2 className="h5 mt-2">{t('portal.module.error.title')}</h2>
+            <p className="small text-secondary mb-0">{t('portal.module.error.message', { moduleId })}</p>
+          </section>
+        )
       }
     >
       {children}
