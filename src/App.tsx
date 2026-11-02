@@ -4,10 +4,12 @@ import type { AuthenticatedUser, CameraStatus, UserRole } from './domain/platfor
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
 import { Dashboard } from './features/monitoring/Dashboard';
-import { I18nProvider, useI18n } from './i18n/i18n';
+import { I18nProvider, isLocale, useI18n } from './i18n/i18n';
+import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
+import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
 import { getOrCreateClientId } from './services/clientIdentity';
 import { ApiError, getJson, postJson, request } from './services/http';
-import { applyTheme, readSavedTheme, type ThemeId } from './theme/theme';
+import { applyTheme, isThemeId, readSavedTheme, type ThemeId } from './theme/theme';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
 
@@ -16,7 +18,7 @@ function validateRole(role: string): role is UserRole {
 }
 
 function AppContent() {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [screen, setScreen] = useState<ScreenState>('loading');
   const [role, setRole] = useState<UserRole>();
   const [canMonitor, setCanMonitor] = useState(false);
@@ -27,11 +29,41 @@ function AppContent() {
   const [theme, setTheme] = useState<ThemeId>(readSavedTheme);
   const [clientCount, setClientCount] = useState<string>();
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
   const pollInFlight = useRef(false);
+  const portalPreferencesReady = useRef(false);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (screen !== 'authenticated') {
+      portalPreferencesReady.current = false;
+      return;
+    }
+    if (!portalPreferencesReady.current) {
+      portalPreferencesReady.current = true;
+      return;
+    }
+    void savePortalPreferences(theme, locale).catch(() => {
+      // The local preference remains active if the portal is unavailable.
+    });
+  }, [screen, theme, locale]);
+
+  const loadPortalContext = useCallback(async (): Promise<void> => {
+    try {
+      const [navigation, preferences] = await Promise.all([getPortalNavigation(), getPortalPreferences()]);
+      setPortalModuleIds(navigation.modules.map((module) => module.moduleId));
+      if (!preferences.isDefault) {
+        if (isThemeId(preferences.themeId)) setTheme(preferences.themeId);
+        if (isLocale(preferences.languageTag)) setLocale(preferences.languageTag);
+      }
+    } catch {
+      // The legacy dashboard remains usable if the portal projection is unavailable.
+      setPortalModuleIds(undefined);
+    }
+  }, [setLocale]);
 
   const loadAuthenticatedState = useCallback(async (): Promise<void> => {
     const user = await getJson<AuthenticatedUser>('/api/v1/auth/me');
@@ -40,6 +72,7 @@ function AppContent() {
     setCanMonitor(user.role === 'Administrator' || user.canMonitor);
     setUsername(user.username);
     setError('');
+    await loadPortalContext();
     if (user.role !== 'Administrator' && !user.canMonitor) {
       setCameras([]);
       setSelectedCameraId(undefined);
@@ -54,7 +87,7 @@ function AppContent() {
         : cameraList[0]?.cameraId,
     );
     setScreen('authenticated');
-  }, []);
+  }, [loadPortalContext]);
 
   const checkSession = useCallback(async () => {
     const session = await getJson<{ authenticated: boolean }>('/api/v1/auth/session');
@@ -65,6 +98,7 @@ function AppContent() {
       setCameras([]);
       setSelectedCameraId(undefined);
       setClientCount(undefined);
+      setPortalModuleIds(undefined);
       setScreen('anonymous');
       return;
     }
@@ -102,6 +136,7 @@ function AppContent() {
           setCameras([]);
           setSelectedCameraId(undefined);
           setClientCount(undefined);
+          setPortalModuleIds(undefined);
           return;
         }
         const cameraList = await getJson<CameraStatus[]>('/api/v1/cameras');
@@ -136,6 +171,7 @@ function AppContent() {
             setCameras([]);
             setSelectedCameraId(undefined);
             setClientCount(undefined);
+            setPortalModuleIds(undefined);
           } else setError(t('app.error.offline'));
         }
       } finally {
@@ -208,6 +244,7 @@ function AppContent() {
     setCameras([]);
     setSelectedCameraId(undefined);
     setClientCount(undefined);
+    setPortalModuleIds(undefined);
     setError('');
     setScreen('anonymous');
     setLogoutBusy(false);
@@ -246,12 +283,15 @@ function AppContent() {
         <UserLanding canRequestAccess={role === 'User'} />
       )}
       {screen === 'authenticated' && role && canMonitor && (
-        <Dashboard
-          cameras={cameras}
-          selectedCameraId={selectedCamera?.cameraId}
-          onCameraSelect={setSelectedCameraId}
-          userRole={role}
-        />
+        <PortalModuleBoundary moduleId="monitoring">
+          <Dashboard
+            cameras={cameras}
+            selectedCameraId={selectedCamera?.cameraId}
+            onCameraSelect={setSelectedCameraId}
+            userRole={role}
+            portalModuleIds={portalModuleIds}
+          />
+        </PortalModuleBoundary>
       )}
       {screen === 'error' && (
         <section className="panel-card feedback-panel" aria-labelledby="service-error-title">

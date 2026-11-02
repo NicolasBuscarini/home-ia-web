@@ -42,7 +42,7 @@ export function AppHeader({
       <div className="header-brand">
         <span className="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none">
-            <title>Garagem IA</title>
+            <title>Home IA</title>
             <path
               d="M4 14.2 16 5l12 9.2v12.3a1.5 1.5 0 0 1-1.5 1.5h-21A1.5 1.5 0 0 1 4 26.5V14.2Z"
               stroke="currentColor"
@@ -59,7 +59,7 @@ export function AppHeader({
         </span>
         <div>
           <p className="eyebrow mb-1">
-            GARAGEM IA <span className="brand-separator">/</span> {t('app.brand.local')}
+            HOME IA <span className="brand-separator">/</span> {t('app.brand.local')}
           </p>
           <h1 className="h3 mb-0">{t('app.title')}</h1>
         </div>

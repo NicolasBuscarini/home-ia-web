@@ -1,6 +1,12 @@
 # garage-watch-web
 
-Frontend React/TypeScript da Garagem IA, mantido neste repositório independente e integrado à API `garage-watch-platform`. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
+Frontend React/TypeScript do **Home IA**, mantido neste repositório independente e integrado à API `garage-watch-platform`.
+
+## Portal (T16-D parcial)
+
+A UI atual passou a consumir a projeção do portal: após autenticar, busca `GET /api/v1/portal/navigation` para decidir quais módulos/grupos de menu exibir e `GET /api/v1/portal/preferences` para aplicar tema/idioma persistidos; mudanças de tema/idioma são enviadas por `PUT /api/v1/portal/preferences`. O painel de monitoramento é montado atrás de `PortalModuleBoundary`, que contém falhas do módulo sem derrubar o cabeçalho/menu do portal. A marca visível e o título passam a ser **Home IA**; o código de monitoramento continua no mesmo bundle e repositório nesta fase.
+
+Esta é uma composição **modular no mesmo bundle**, não Module Federation/remote build: a separação física em `home-ia-web` + `home-ia-monitoring-web`, o carregamento remoto e a migração de todos os submenus para o contrato de módulo continuam pendentes (`T16-D` restante/T16-F). O fallback legado permanece quando a API de navegação/preferências está indisponível; a autorização continua no servidor. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
 
 ## Tecnologias
 

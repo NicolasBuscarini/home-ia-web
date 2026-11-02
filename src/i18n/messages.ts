@@ -4,7 +4,11 @@ export type Locale = (typeof LOCALES)[number];
 const enUS = {
   'app.brand.local': 'LOCAL',
   'app.title': 'Monitoring',
-  'app.metaDescription': 'Local garage monitoring dashboard',
+  'app.metaDescription': 'Local Home IA residential portal',
+  'portal.module.error.eyebrow': 'PORTAL MODULE',
+  'portal.module.error.title': 'Module unavailable',
+  'portal.module.error.message':
+    'The {moduleId} module could not be loaded. The rest of the portal remains available.',
   'app.loading.eyebrow': 'STARTING',
   'app.loading.message': 'Checking local session…',
   'app.error.eyebrow': 'LOCAL SERVICE',
@@ -680,7 +684,11 @@ export type TranslationValues = Record<string, string | number>;
 const ptBR: Record<TranslationKey, string> = {
   'app.brand.local': 'LOCAL',
   'app.title': 'Monitoramento',
-  'app.metaDescription': 'Painel local de monitoramento da garagem',
+  'app.metaDescription': 'Portal residencial local Home IA',
+  'portal.module.error.eyebrow': 'MÓDULO DO PORTAL',
+  'portal.module.error.title': 'Módulo indisponível',
+  'portal.module.error.message':
+    'Não foi possível carregar o módulo {moduleId}. O restante do portal continua disponível.',
   'app.loading.eyebrow': 'INICIANDO',
   'app.loading.message': 'Consultando sessão local…',
   'app.error.eyebrow': 'SERVIÇO LOCAL',

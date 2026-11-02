@@ -31,11 +31,14 @@ const viewLabels: Record<DashboardView, TranslationKey> = {
 interface DashboardMenuProps {
   active: DashboardView;
   isAdmin: boolean;
+  portalModuleIds?: string[];
   onChange: (view: DashboardView) => void;
 }
 
-export function DashboardMenu({ active, isAdmin, onChange }: DashboardMenuProps) {
+export function DashboardMenu({ active, isAdmin, portalModuleIds, onChange }: DashboardMenuProps) {
   const { t } = useI18n();
+  const showMonitoring = !portalModuleIds || portalModuleIds.includes('monitoring');
+  const showAdministration = !portalModuleIds || portalModuleIds.includes('administration');
   const [openGroup, setOpenGroup] = useState<MenuGroup | null>(null);
   const menuRef = useRef<HTMLElement>(null);
   const systemButtonRef = useRef<HTMLButtonElement>(null);
@@ -66,26 +69,30 @@ export function DashboardMenu({ active, isAdmin, onChange }: DashboardMenuProps)
 
   return (
     <nav className="dashboard-menu mb-3" aria-label={t('dashboard.menu.label')} ref={menuRef}>
-      <button
-        className="view-tab"
-        type="button"
-        id="tab-monitor"
-        aria-current={active === 'monitor' ? 'page' : undefined}
-        onClick={() => choose('monitor')}
-      >
-        {t('dashboard.menu.monitor')}
-      </button>
-      <button
-        className="view-tab"
-        type="button"
-        id="tab-clips"
-        aria-controls="view-clips"
-        aria-current={active === 'clips' ? 'page' : undefined}
-        onClick={() => choose('clips')}
-      >
-        {t('dashboard.menu.clips')}
-      </button>
-      {isAdmin && (
+      {showMonitoring && (
+        <>
+          <button
+            className="view-tab"
+            type="button"
+            id="tab-monitor"
+            aria-current={active === 'monitor' ? 'page' : undefined}
+            onClick={() => choose('monitor')}
+          >
+            {t('dashboard.menu.monitor')}
+          </button>
+          <button
+            className="view-tab"
+            type="button"
+            id="tab-clips"
+            aria-controls="view-clips"
+            aria-current={active === 'clips' ? 'page' : undefined}
+            onClick={() => choose('clips')}
+          >
+            {t('dashboard.menu.clips')}
+          </button>
+        </>
+      )}
+      {isAdmin && showAdministration && (
         <>
           <div className="dashboard-menu-group">
             <button

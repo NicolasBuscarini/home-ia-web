@@ -18,7 +18,7 @@ interface I18nValue {
 }
 const I18nContext = createContext<I18nValue | undefined>(undefined);
 
-function isLocale(value: unknown): value is Locale {
+export function isLocale(value: unknown): value is Locale {
   return LOCALES.some((locale) => locale === value);
 }
 
@@ -59,7 +59,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = `Garagem IA · ${t('app.title')}`;
+    document.title = `Home IA · ${t('app.title')}`;
     document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.metaDescription'));
   }, [locale, t]);
   const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);

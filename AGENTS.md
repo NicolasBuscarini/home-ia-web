@@ -2,7 +2,8 @@
 
 ## Autoridade e fronteiras
 
-- Repositório público independente da interface React da Garagem IA; `../../docs/` no repositório de contexto é a autoridade de produto, segurança e arquitetura.
+- Repositório público independente da interface React do Home IA; `../../docs/` no repositório de contexto é a autoridade de produto, segurança e arquitetura.
+- Em `T16-D`, a UI consome a projeção do portal (`/api/v1/portal/navigation`, `/api/v1/portal/preferences`) e isola o módulo de Monitoramento com `PortalModuleBoundary`. A composição ainda é no mesmo bundle; não a apresentar como Module Federation/remote build até a separação física ser implementada.
 - A API em `garage-watch-platform` continua autoridade de sessão, papéis, câmera, health e mídia. Não duplicar regras de autorização nem incorporar segredos no bundle.
 - Em produção, o bundle é servido pelo host da API same-origin; manter cookies, HLS, cadastro e Origin no mesmo host. Vite usa proxy somente para desenvolvimento local.
 - Usuário `User` não recebe câmera. Não chamar catálogo/ready/live para a landing sem acesso; esconder UI nunca substitui autorização do servidor.
