@@ -59,6 +59,7 @@ function AppContent() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
   const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pollInFlight = useRef(false);
   const portalPreferencesReady = useRef(false);
 
@@ -331,75 +332,101 @@ function AppContent() {
         <UserLanding canRequestAccess={role === 'User'} />
       )}
       {screen === 'authenticated' && role && (monitoringAllowed || administrationAllowed) && (
-        <nav className="module-nav mb-3" aria-label={t('shell.modules.label')}>
-          <ul className="nav nav-pills">
-            {monitoringAllowed && (
-              <li className="nav-item">
-                <button
-                  className={`nav-link ${activeModule === 'monitoring' ? 'active' : ''}`}
-                  type="button"
-                  aria-current={activeModule === 'monitoring' ? 'page' : undefined}
-                  onClick={() => setActiveModule('monitoring')}
-                >
-                  {t('shell.modules.monitoring')}
-                </button>
-              </li>
-            )}
-            {administrationAllowed && (
-              <li className="nav-item">
-                <button
-                  className={`nav-link ${activeModule === 'access' ? 'active' : ''}`}
-                  type="button"
-                  aria-current={activeModule === 'access' ? 'page' : undefined}
-                  onClick={() => setActiveModule('access')}
-                >
-                  {t('shell.modules.access')}
-                </button>
-              </li>
-            )}
-            {administrationAllowed && (
-              <li className="nav-item">
-                <button
-                  className={`nav-link ${activeModule === 'systems' ? 'active' : ''}`}
-                  type="button"
-                  aria-current={activeModule === 'systems' ? 'page' : undefined}
-                  onClick={() => setActiveModule('systems')}
-                >
-                  {t('shell.modules.systems')}
-                </button>
-              </li>
-            )}
-          </ul>
-        </nav>
+        <>
+          <button
+            className="module-menu-button"
+            type="button"
+            aria-expanded={mobileNavOpen}
+            aria-controls="module-navigation"
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">☰</span> {t('shell.modules.label')}
+          </button>
+          <nav
+            id="module-navigation"
+            className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
+            aria-label={t('shell.modules.label')}
+          >
+            <ul className="nav nav-pills">
+              {monitoringAllowed && (
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeModule === 'monitoring' ? 'active' : ''}`}
+                    type="button"
+                    aria-current={activeModule === 'monitoring' ? 'page' : undefined}
+                    onClick={() => {
+                      setActiveModule('monitoring');
+                      setMobileNavOpen(false);
+                    }}
+                  >
+                    {t('shell.modules.monitoring')}
+                  </button>
+                </li>
+              )}
+              {administrationAllowed && (
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeModule === 'access' ? 'active' : ''}`}
+                    type="button"
+                    aria-current={activeModule === 'access' ? 'page' : undefined}
+                    onClick={() => {
+                      setActiveModule('access');
+                      setMobileNavOpen(false);
+                    }}
+                  >
+                    {t('shell.modules.access')}
+                  </button>
+                </li>
+              )}
+              {administrationAllowed && (
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeModule === 'systems' ? 'active' : ''}`}
+                    type="button"
+                    aria-current={activeModule === 'systems' ? 'page' : undefined}
+                    onClick={() => {
+                      setActiveModule('systems');
+                      setMobileNavOpen(false);
+                    }}
+                  >
+                    {t('shell.modules.systems')}
+                  </button>
+                </li>
+              )}
+            </ul>
+          </nav>
+        </>
       )}
-      {screen === 'authenticated' && role && activeModule === 'monitoring' && monitoringAllowed && (
-        <PortalModuleBoundary moduleId="monitoring">
-          <Suspense fallback={<ModuleLoading />}>
-            <RemoteMonitoringModule
-              locale={locale}
-              cameras={cameras}
-              selectedCameraId={selectedCamera?.cameraId}
-              onCameraSelect={setSelectedCameraId}
-              userRole={role}
-              portalModuleIds={portalModuleIds}
-            />
-          </Suspense>
-        </PortalModuleBoundary>
-      )}
-      {screen === 'authenticated' && role && activeModule === 'access' && administrationAllowed && (
-        <PortalModuleBoundary moduleId="access">
-          <Suspense fallback={<ModuleLoading />}>
-            <RemoteAccessModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
-          </Suspense>
-        </PortalModuleBoundary>
-      )}
-      {screen === 'authenticated' && role && activeModule === 'systems' && administrationAllowed && (
-        <PortalModuleBoundary moduleId="systems">
-          <Suspense fallback={<ModuleLoading />}>
-            <RemoteSystemsModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
-          </Suspense>
-        </PortalModuleBoundary>
-      )}
+      <div className="app-content">
+        {screen === 'authenticated' && role && activeModule === 'monitoring' && monitoringAllowed && (
+          <PortalModuleBoundary moduleId="monitoring">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteMonitoringModule
+                locale={locale}
+                cameras={cameras}
+                selectedCameraId={selectedCamera?.cameraId}
+                onCameraSelect={setSelectedCameraId}
+                userRole={role}
+                portalModuleIds={portalModuleIds}
+              />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+        {screen === 'authenticated' && role && activeModule === 'access' && administrationAllowed && (
+          <PortalModuleBoundary moduleId="access">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteAccessModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+        {screen === 'authenticated' && role && activeModule === 'systems' && administrationAllowed && (
+          <PortalModuleBoundary moduleId="systems">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteSystemsModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+      </div>
       {screen === 'error' && (
         <section className="panel-card feedback-panel" aria-labelledby="service-error-title">
           <span className="eyebrow">{t('app.error.eyebrow')}</span>
