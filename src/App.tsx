@@ -329,6 +329,7 @@ function AppContent() {
     }
   }, [sidebarCollapsed]);
 
+  const managementSubmodules = role === 'Administrator' && administrationAllowed;
   const moduleItems: Array<{
     id: ModuleView;
     icon: string;
@@ -341,10 +342,21 @@ function AppContent() {
       icon: '◉',
       labelKey: 'shell.modules.monitoring',
       visible: monitoringAllowed,
-      views: [
-        { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
-        { id: 'clips', labelKey: 'dashboard.menu.clips' },
-      ],
+      views: managementSubmodules
+        ? [
+            { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
+            { id: 'clips', labelKey: 'dashboard.menu.clips' },
+            { id: 'clip-settings', labelKey: 'dashboard.menu.clipSettings' },
+            { id: 'health', labelKey: 'dashboard.menu.health' },
+            { id: 'dependencies', labelKey: 'dashboard.menu.dependencies' },
+            { id: 'capture', labelKey: 'dashboard.menu.capture' },
+            { id: 'cameras', labelKey: 'dashboard.menu.cameras' },
+            { id: 'people', labelKey: 'dashboard.menu.people' },
+          ]
+        : [
+            { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
+            { id: 'clips', labelKey: 'dashboard.menu.clips' },
+          ],
     },
     {
       id: 'activitywatch',
@@ -506,7 +518,6 @@ function AppContent() {
                 userRole={role}
                 portalModuleIds={portalModuleIds}
                 activeView={monitoringView}
-                onViewChange={setMonitoringView}
               />
             </Suspense>
           </PortalModuleBoundary>

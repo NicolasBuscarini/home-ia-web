@@ -8,5 +8,4 @@ export interface MonitoringModuleProps {
   userRole: UserRole;
   portalModuleIds?: string[];
   activeView?: string;
-  onViewChange?: (view: string) => void;
 }

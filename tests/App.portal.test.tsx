@@ -58,17 +58,23 @@ function installFetch(
   options: {
     authenticated?: boolean;
     modules?: string[];
+    role?: 'Administrator' | 'Viewer';
     portalPreferences?: ReturnType<typeof preferences>;
     writes?: Array<Record<string, unknown>>;
   } = {},
 ) {
-  const { authenticated = true, modules = ['monitoring', 'administration'], writes = [] } = options;
+  const {
+    authenticated = true,
+    modules = ['monitoring', 'administration'],
+    role = 'Administrator',
+    writes = [],
+  } = options;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const path = String(input);
     const method = init?.method ?? 'GET';
     if (path === '/api/v1/auth/session') return json({ authenticated });
     if (path === '/api/v1/auth/login') return new Response(null, { status: 204 });
-    if (path === '/api/v1/auth/me') return json({ username: 'admin', role: 'Administrator' });
+    if (path === '/api/v1/auth/me') return json({ username: 'admin', role, canMonitor: true });
     if (path === '/api/v1/cameras') return json([camera]);
     if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
     if (path === '/api/v1/portal/navigation') return json(navigation(modules));
@@ -139,8 +145,21 @@ describe('portal shell integration', () => {
       'aria-current',
       'page',
     );
+    expect(within(subnav).getAllByRole('button')).toHaveLength(8);
+    for (const label of [
+      'Regras de clipe',
+      'Saúde do sistema',
+      'Dependências',
+      'Captura e segmentos',
+      'Câmeras',
+      'Pessoas',
+    ]) {
+      expect(within(subnav).getByRole('button', { name: label })).toBeInTheDocument();
+    }
     await user.click(within(subnav).getByRole('button', { name: 'Clipes' }));
     expect(screen.getByTestId('monitoring-module')).toHaveAttribute('data-active-view', 'clips');
+    await user.click(within(subnav).getByRole('button', { name: 'Regras de clipe' }));
+    expect(screen.getByTestId('monitoring-module')).toHaveAttribute('data-active-view', 'clip-settings');
 
     await user.click(within(nav).getByRole('button', { name: 'Acessos' }));
     const access = await screen.findByTestId('access-module');
@@ -157,6 +176,21 @@ describe('portal shell integration', () => {
     await user.click(within(nav).getByRole('button', { name: 'Sistemas' }));
     expect(menuButton).toHaveAttribute('aria-expanded', 'false');
     expect(nav).not.toHaveClass('is-open');
+  });
+
+  it('keeps administrative submodules out of the sidebar for viewers', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({ modules: ['monitoring'], role: 'Viewer' });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    const subnav = within(nav).getByRole('list', { name: 'Submódulos de Monitoramento' });
+    expect(within(subnav).getAllByRole('button')).toHaveLength(2);
+    expect(within(subnav).getByRole('button', { name: 'Monitoramento' })).toBeInTheDocument();
+    expect(within(subnav).getByRole('button', { name: 'Clipes' })).toBeInTheDocument();
+    expect(within(subnav).queryByRole('button', { name: 'Pessoas' })).not.toBeInTheDocument();
+    expect(within(subnav).queryByRole('button', { name: 'Regras de clipe' })).not.toBeInTheDocument();
   });
 
   it('collapses and expands the desktop module rail', async () => {
