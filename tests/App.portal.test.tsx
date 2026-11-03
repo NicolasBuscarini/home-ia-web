@@ -25,7 +25,28 @@ const camera = {
   liveUrl: '/api/v1/live/garage-01/index.m3u8',
 };
 
-function navigation(moduleIds: string[]) {
+const monitoringAdminItems = [
+  ['monitor', 'dashboard.menu.monitor'],
+  ['clips', 'dashboard.menu.clips'],
+  ['clip-settings', 'dashboard.menu.clipSettings'],
+  ['health', 'dashboard.menu.health'],
+  ['dependencies', 'dashboard.menu.dependencies'],
+  ['capture', 'dashboard.menu.capture'],
+  ['cameras', 'dashboard.menu.cameras'],
+  ['people', 'dashboard.menu.people'],
+].map(([itemId, labelKey], index) => ({ itemId, labelKey, sortOrder: (index + 1) * 10 }));
+
+const administrationItems = [
+  ['users', 'dashboard.menu.users'],
+  ['profiles', 'dashboard.menu.profiles'],
+  ['requests', 'dashboard.menu.accessRequests'],
+].map(([itemId, labelKey], index) => ({ itemId, labelKey, sortOrder: (index + 1) * 10 }));
+
+function navigation(
+  moduleIds: string[],
+  role: 'Administrator' | 'Viewer' = 'Administrator',
+  items: Record<string, Array<{ itemId: string; labelKey: string; sortOrder: number }>> = {},
+) {
   return {
     residenceId: 'home',
     generatedAtUtc: '2026-11-02T12:00:00Z',
@@ -38,6 +59,15 @@ function navigation(moduleIds: string[]) {
       menuIcon: 'module',
       menuLabelKey: `modules.${moduleId}.menu`,
       route: `/modules/${moduleId}`,
+      items:
+        items[moduleId] ??
+        (moduleId === 'monitoring'
+          ? role === 'Administrator' && moduleIds.includes('administration')
+            ? monitoringAdminItems
+            : monitoringAdminItems.slice(0, 2)
+          : moduleId === 'administration'
+            ? administrationItems
+            : []),
     })),
   };
 }
@@ -59,6 +89,8 @@ function installFetch(
     authenticated?: boolean;
     modules?: string[];
     role?: 'Administrator' | 'Viewer';
+    items?: Record<string, Array<{ itemId: string; labelKey: string; sortOrder: number }>>;
+    failNavigation?: boolean;
     portalPreferences?: ReturnType<typeof preferences>;
     writes?: Array<Record<string, unknown>>;
   } = {},
@@ -77,7 +109,10 @@ function installFetch(
     if (path === '/api/v1/auth/me') return json({ username: 'admin', role, canMonitor: true });
     if (path === '/api/v1/cameras') return json([camera]);
     if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
-    if (path === '/api/v1/portal/navigation') return json(navigation(modules));
+    if (path === '/api/v1/portal/navigation') {
+      if (options.failNavigation) return json({ error: 'unavailable' }, 503);
+      return json(navigation(modules, role, options.items ?? {}));
+    }
     if (path === '/api/v1/portal/preferences' && method === 'GET')
       return json(options.portalPreferences ?? preferences());
     if (path === '/api/v1/portal/preferences' && method === 'PUT') {
@@ -191,6 +226,39 @@ describe('portal shell integration', () => {
     expect(within(subnav).getByRole('button', { name: 'Clipes' })).toBeInTheDocument();
     expect(within(subnav).queryByRole('button', { name: 'Pessoas' })).not.toBeInTheDocument();
     expect(within(subnav).queryByRole('button', { name: 'Regras de clipe' })).not.toBeInTheDocument();
+  });
+
+  it('renders submodules projected by the portal catalog instead of local defaults', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({
+      modules: ['monitoring', 'administration'],
+      items: {
+        monitoring: [
+          { itemId: 'monitor', labelKey: 'dashboard.menu.monitor', sortOrder: 10 },
+          { itemId: 'cameras', labelKey: 'dashboard.menu.cameras', sortOrder: 20 },
+        ],
+        administration: [{ itemId: 'users', labelKey: 'dashboard.menu.users', sortOrder: 10 }],
+      },
+    });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    const subnav = within(nav).getByRole('list', { name: 'Submódulos de Monitoramento' });
+    expect(within(subnav).getAllByRole('button')).toHaveLength(2);
+    expect(within(subnav).getByRole('button', { name: 'Câmeras' })).toBeInTheDocument();
+    expect(within(subnav).queryByRole('button', { name: 'Clipes' })).not.toBeInTheDocument();
+  });
+
+  it('keeps local navigation usable when the portal projection is unavailable', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({ modules: ['monitoring', 'administration'], role: 'Administrator', failNavigation: true });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    const subnav = within(nav).getByRole('list', { name: 'Submódulos de Monitoramento' });
+    expect(within(subnav).getAllByRole('button')).toHaveLength(8);
   });
 
   it('collapses and expands the desktop module rail', async () => {

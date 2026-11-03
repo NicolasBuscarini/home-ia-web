@@ -1,5 +1,11 @@
 import { getJson, request } from 'home-ia-shared';
 
+export interface PortalNavigationItem {
+  itemId: string;
+  labelKey: string;
+  sortOrder: number;
+}
+
 export interface PortalNavigationModule {
   moduleId: string;
   displayNameKey: string;
@@ -9,6 +15,7 @@ export interface PortalNavigationModule {
   menuIcon: string;
   menuLabelKey: string;
   route: string;
+  items: PortalNavigationItem[];
 }
 
 export interface PortalNavigation {

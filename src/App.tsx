@@ -59,6 +59,8 @@ function AppContent() {
   const [clientCount, setClientCount] = useState<string>();
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
+  const [portalSubmodules, setPortalSubmodules] =
+    useState<Record<string, Array<{ id: string; labelKey: string }>>>();
   const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
   const [monitoringView, setMonitoringView] = useState('monitor');
   const [accessView, setAccessView] = useState('users');
@@ -99,6 +101,14 @@ function AppContent() {
     try {
       const [navigation, preferences] = await Promise.all([getPortalNavigation(), getPortalPreferences()]);
       setPortalModuleIds(navigation.modules.map((module) => module.moduleId));
+      setPortalSubmodules(
+        Object.fromEntries(
+          navigation.modules.map((module) => [
+            module.moduleId,
+            module.items.map((item) => ({ id: item.itemId, labelKey: item.labelKey })),
+          ]),
+        ),
+      );
       if (!preferences.isDefault) {
         if (isThemeId(preferences.themeId)) setTheme(preferences.themeId);
         if (isLocale(preferences.languageTag)) setLocale(preferences.languageTag);
@@ -106,6 +116,7 @@ function AppContent() {
     } catch {
       // The legacy dashboard remains usable if the portal projection is unavailable.
       setPortalModuleIds(undefined);
+      setPortalSubmodules(undefined);
     }
   }, [setLocale]);
 
@@ -143,6 +154,7 @@ function AppContent() {
       setSelectedCameraId(undefined);
       setClientCount(undefined);
       setPortalModuleIds(undefined);
+      setPortalSubmodules(undefined);
       setScreen('anonymous');
       return;
     }
@@ -181,6 +193,7 @@ function AppContent() {
           setSelectedCameraId(undefined);
           setClientCount(undefined);
           setPortalModuleIds(undefined);
+          setPortalSubmodules(undefined);
           return;
         }
         const cameraList = await getJson<CameraStatus[]>('/api/v1/cameras');
@@ -216,6 +229,7 @@ function AppContent() {
             setSelectedCameraId(undefined);
             setClientCount(undefined);
             setPortalModuleIds(undefined);
+            setPortalSubmodules(undefined);
           } else setError(t('app.error.offline'));
         }
       } finally {
@@ -289,6 +303,7 @@ function AppContent() {
     setSelectedCameraId(undefined);
     setClientCount(undefined);
     setPortalModuleIds(undefined);
+    setPortalSubmodules(undefined);
     setError('');
     setScreen('anonymous');
     setLogoutBusy(false);
@@ -330,6 +345,32 @@ function AppContent() {
   }, [sidebarCollapsed]);
 
   const managementSubmodules = role === 'Administrator' && administrationAllowed;
+  // Submodule menus are a portal projection. The local lists remain only as a fallback for an
+  // unreachable or older portal, so the dashboard never loses navigation during an outage.
+  const monitoringViews = portalSubmodules
+    ? (portalSubmodules.monitoring ?? [])
+    : managementSubmodules
+      ? [
+          { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
+          { id: 'clips', labelKey: 'dashboard.menu.clips' },
+          { id: 'clip-settings', labelKey: 'dashboard.menu.clipSettings' },
+          { id: 'health', labelKey: 'dashboard.menu.health' },
+          { id: 'dependencies', labelKey: 'dashboard.menu.dependencies' },
+          { id: 'capture', labelKey: 'dashboard.menu.capture' },
+          { id: 'cameras', labelKey: 'dashboard.menu.cameras' },
+          { id: 'people', labelKey: 'dashboard.menu.people' },
+        ]
+      : [
+          { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
+          { id: 'clips', labelKey: 'dashboard.menu.clips' },
+        ];
+  const accessViews = portalSubmodules
+    ? (portalSubmodules.administration ?? [])
+    : [
+        { id: 'users', labelKey: 'dashboard.menu.users' },
+        { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
+        { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
+      ];
   const moduleItems: Array<{
     id: ModuleView;
     icon: string;
@@ -342,21 +383,7 @@ function AppContent() {
       icon: '◉',
       labelKey: 'shell.modules.monitoring',
       visible: monitoringAllowed,
-      views: managementSubmodules
-        ? [
-            { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
-            { id: 'clips', labelKey: 'dashboard.menu.clips' },
-            { id: 'clip-settings', labelKey: 'dashboard.menu.clipSettings' },
-            { id: 'health', labelKey: 'dashboard.menu.health' },
-            { id: 'dependencies', labelKey: 'dashboard.menu.dependencies' },
-            { id: 'capture', labelKey: 'dashboard.menu.capture' },
-            { id: 'cameras', labelKey: 'dashboard.menu.cameras' },
-            { id: 'people', labelKey: 'dashboard.menu.people' },
-          ]
-        : [
-            { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
-            { id: 'clips', labelKey: 'dashboard.menu.clips' },
-          ],
+      views: monitoringViews.map((view) => ({ id: view.id, labelKey: view.labelKey as TranslationKey })),
     },
     {
       id: 'activitywatch',
@@ -370,11 +397,7 @@ function AppContent() {
       icon: '◫',
       labelKey: 'shell.modules.access',
       visible: administrationAllowed,
-      views: [
-        { id: 'users', labelKey: 'dashboard.menu.users' },
-        { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
-        { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
-      ],
+      views: accessViews.map((view) => ({ id: view.id, labelKey: view.labelKey as TranslationKey })),
     },
     {
       id: 'systems',
