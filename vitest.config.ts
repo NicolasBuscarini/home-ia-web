@@ -6,6 +6,8 @@ export default defineConfig({
     alias: {
       'home-ia-shared': path.resolve(__dirname, '../home-ia-shared/src/index.ts'),
       'monitoring/MonitoringModule': path.resolve(__dirname, 'tests/monitoringModuleStub.tsx'),
+      'platform/AccessModule': path.resolve(__dirname, 'tests/accessModuleStub.tsx'),
+      'platform/SystemsModule': path.resolve(__dirname, 'tests/systemsModuleStub.tsx'),
     },
     dedupe: ['react', 'react-dom'],
   },

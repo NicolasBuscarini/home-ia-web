@@ -2,14 +2,17 @@ import type { AuthenticatedUser, CameraStatus, UserRole } from 'home-ia-shared';
 import {
   ApiError,
   applyTheme,
+  applyThemeStyle,
   getJson,
   I18nProvider,
   isLocale,
   isThemeId,
   postJson,
   readSavedTheme,
+  readSavedThemeStyle,
   request,
   type ThemeId,
+  type ThemeStyleId,
   useI18n,
 } from 'home-ia-shared';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -21,8 +24,21 @@ import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from
 import { getOrCreateClientId } from './services/clientIdentity';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
+type ModuleView = 'monitoring' | 'access' | 'systems';
 
 const RemoteMonitoringModule = lazy(() => import('monitoring/MonitoringModule'));
+const RemoteAccessModule = lazy(() => import('platform/AccessModule'));
+const RemoteSystemsModule = lazy(() => import('platform/SystemsModule'));
+
+function ModuleLoading() {
+  const { t } = useI18n();
+  return (
+    <section className="panel-card feedback-panel" role="status" aria-live="polite">
+      <span className="eyebrow">{t('portal.module.error.eyebrow')}</span>
+      <p className="mb-0 mt-2">{t('portal.module.loading')}</p>
+    </section>
+  );
+}
 
 function validateRole(role: string): role is UserRole {
   return ['Administrator', 'Viewer', 'User'].includes(role);
@@ -38,15 +54,21 @@ function AppContent() {
   const [selectedCameraId, setSelectedCameraId] = useState<string>();
   const [error, setError] = useState('');
   const [theme, setTheme] = useState<ThemeId>(readSavedTheme);
+  const [themeStyle, setThemeStyle] = useState<ThemeStyleId>(readSavedThemeStyle);
   const [clientCount, setClientCount] = useState<string>();
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
+  const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
   const pollInFlight = useRef(false);
   const portalPreferencesReady = useRef(false);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyThemeStyle(themeStyle);
+  }, [themeStyle]);
 
   useEffect(() => {
     if (screen !== 'authenticated') {
@@ -271,6 +293,19 @@ function AppContent() {
   }
 
   const selectedCamera = cameras.find((item) => item.cameraId === selectedCameraId);
+  const isAdministrator = role === 'Administrator';
+  const monitoringAllowed = canMonitor && (!portalModuleIds || portalModuleIds.includes('monitoring'));
+  const administrationAllowed =
+    isAdministrator && (!portalModuleIds || portalModuleIds.includes('administration'));
+
+  useEffect(() => {
+    const available: ModuleView[] = [];
+    if (monitoringAllowed) available.push('monitoring');
+    if (administrationAllowed) available.push('access', 'systems');
+    if (available.length > 0 && !available.includes(activeModule)) {
+      setActiveModule(available[0] ?? 'monitoring');
+    }
+  }, [activeModule, administrationAllowed, monitoringAllowed]);
 
   return (
     <main className="container app-shell py-4 py-md-5">
@@ -280,6 +315,8 @@ function AppContent() {
         activeClients={screen === 'authenticated' && canMonitor ? clientCount : undefined}
         theme={theme}
         onThemeChange={setTheme}
+        themeStyle={themeStyle}
+        onThemeStyleChange={setThemeStyle}
         onLogout={() => void logout()}
         busy={logoutBusy}
       />
@@ -293,16 +330,51 @@ function AppContent() {
       {screen === 'authenticated' && role && !canMonitor && (
         <UserLanding canRequestAccess={role === 'User'} />
       )}
-      {screen === 'authenticated' && role && canMonitor && (
+      {screen === 'authenticated' && role && (monitoringAllowed || administrationAllowed) && (
+        <nav className="module-nav mb-3" aria-label={t('shell.modules.label')}>
+          <ul className="nav nav-pills">
+            {monitoringAllowed && (
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeModule === 'monitoring' ? 'active' : ''}`}
+                  type="button"
+                  aria-current={activeModule === 'monitoring' ? 'page' : undefined}
+                  onClick={() => setActiveModule('monitoring')}
+                >
+                  {t('shell.modules.monitoring')}
+                </button>
+              </li>
+            )}
+            {administrationAllowed && (
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeModule === 'access' ? 'active' : ''}`}
+                  type="button"
+                  aria-current={activeModule === 'access' ? 'page' : undefined}
+                  onClick={() => setActiveModule('access')}
+                >
+                  {t('shell.modules.access')}
+                </button>
+              </li>
+            )}
+            {administrationAllowed && (
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeModule === 'systems' ? 'active' : ''}`}
+                  type="button"
+                  aria-current={activeModule === 'systems' ? 'page' : undefined}
+                  onClick={() => setActiveModule('systems')}
+                >
+                  {t('shell.modules.systems')}
+                </button>
+              </li>
+            )}
+          </ul>
+        </nav>
+      )}
+      {screen === 'authenticated' && role && activeModule === 'monitoring' && monitoringAllowed && (
         <PortalModuleBoundary moduleId="monitoring">
-          <Suspense
-            fallback={
-              <section className="panel-card feedback-panel" role="status" aria-live="polite">
-                <span className="eyebrow">{t('portal.module.error.eyebrow')}</span>
-                <p className="mb-0 mt-2">{t('portal.module.loading')}</p>
-              </section>
-            }
-          >
+          <Suspense fallback={<ModuleLoading />}>
             <RemoteMonitoringModule
               locale={locale}
               cameras={cameras}
@@ -311,6 +383,20 @@ function AppContent() {
               userRole={role}
               portalModuleIds={portalModuleIds}
             />
+          </Suspense>
+        </PortalModuleBoundary>
+      )}
+      {screen === 'authenticated' && role && activeModule === 'access' && administrationAllowed && (
+        <PortalModuleBoundary moduleId="access">
+          <Suspense fallback={<ModuleLoading />}>
+            <RemoteAccessModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
+          </Suspense>
+        </PortalModuleBoundary>
+      )}
+      {screen === 'authenticated' && role && activeModule === 'systems' && administrationAllowed && (
+        <PortalModuleBoundary moduleId="systems">
+          <Suspense fallback={<ModuleLoading />}>
+            <RemoteSystemsModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
           </Suspense>
         </PortalModuleBoundary>
       )}

@@ -104,6 +104,27 @@ describe('portal shell integration', () => {
     expect(module).toHaveAttribute('data-module-ids', 'monitoring');
   });
 
+  it('switches between the monitoring, access and systems modules', async () => {
+    installFetch({ modules: ['monitoring', 'administration'] });
+    render(<App />);
+    const user = userEvent.setup();
+
+    const monitoring = await screen.findByTestId('monitoring-module');
+    expect(monitoring).toHaveAttribute('data-module-ids', 'monitoring,administration');
+
+    await user.click(screen.getByRole('button', { name: /Access|Acessos/ }));
+    expect(await screen.findByTestId('access-module')).toHaveAttribute(
+      'data-module-ids',
+      'monitoring,administration',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Systems|Sistemas/ }));
+    expect(await screen.findByTestId('systems-module')).toHaveAttribute(
+      'data-module-ids',
+      'monitoring,administration',
+    );
+  });
+
   it('persists theme and language changes through the portal API', async () => {
     localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
     const writes = installFetch({ modules: ['monitoring', 'administration'] });

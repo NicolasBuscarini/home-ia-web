@@ -1,4 +1,4 @@
-import type { ThemeId, UserRole } from 'home-ia-shared';
+import type { ThemeId, ThemeStyleId, UserRole } from 'home-ia-shared';
 import { LOCALES, type Locale, useI18n } from 'home-ia-shared';
 import { ThemeSelector } from './ThemeSelector';
 
@@ -8,6 +8,8 @@ interface AppHeaderProps {
   activeClients?: string;
   theme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
+  themeStyle: ThemeStyleId;
+  onThemeStyleChange: (style: ThemeStyleId) => void;
   onLogout: () => void;
   busy?: boolean;
 }
@@ -24,6 +26,8 @@ export function AppHeader({
   activeClients,
   theme,
   onThemeChange,
+  themeStyle,
+  onThemeStyleChange,
   onLogout,
   busy = false,
 }: AppHeaderProps) {
@@ -80,7 +84,12 @@ export function AppHeader({
               </option>
             ))}
           </select>
-          <ThemeSelector value={theme} onChange={onThemeChange} />
+          <ThemeSelector
+            value={theme}
+            onChange={onThemeChange}
+            style={themeStyle}
+            onStyleChange={onThemeStyleChange}
+          />
         </div>
         <div className="header-session">
           {role && username && (

@@ -9,6 +9,10 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_MONITORING_REMOTE_URL ||
     env.VITE_MONITORING_REMOTE_URL ||
     'http://127.0.0.1:5174/remoteEntry.js';
+  const platformRemote =
+    process.env.VITE_PLATFORM_REMOTE_URL ||
+    env.VITE_PLATFORM_REMOTE_URL ||
+    'http://127.0.0.1:5175/remoteEntry.js';
   return {
     resolve: {
       dedupe: ['react', 'react-dom'],
@@ -23,6 +27,13 @@ export default defineConfig(({ mode }) => {
             name: 'home_ia_monitoring',
             entry: monitoringRemote,
             entryGlobalName: 'home_ia_monitoring',
+            shareScope: 'default',
+          },
+          platform: {
+            type: 'module',
+            name: 'home_ia_platform',
+            entry: platformRemote,
+            entryGlobalName: 'home_ia_platform',
             shareScope: 'default',
           },
         },

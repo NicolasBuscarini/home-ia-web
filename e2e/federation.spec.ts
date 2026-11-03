@@ -1,7 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+const json = (body: unknown) => ({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify(body),
+});
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('garage-watch.locale.v1', 'pt-BR'));

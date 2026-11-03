@@ -5,14 +5,14 @@ import { describe, expect, it } from 'vitest';
 const stylesheet = readFileSync(resolve(process.cwd(), '../home-ia-shared/src/styles.css'), 'utf8');
 
 describe('UI motion accessibility contract', () => {
-  it('bounds timeline thumbnails so intrinsic image dimensions cannot expand the clip list', () => {
+  it('bounds clip card media so intrinsic image dimensions cannot expand the grid', () => {
+    expect(stylesheet).toMatch(/\.clip-card-media\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*9;/s);
     expect(stylesheet).toMatch(
-      /\.clip-thumbnail\s*\{[^}]*flex: 0 0 7rem;[^}]*height: 3\.9375rem;[^}]*width: 7rem;/s,
+      /\.clip-thumbnail\s*\{[^}]*height:\s*100%;[^}]*object-fit:\s*cover;[^}]*width:\s*100%;/s,
     );
     expect(stylesheet).toMatch(
-      /@media \(max-width: 575\.98px\)[\s\S]*?\.clip-thumbnail\s*\{[^}]*height: 2\.8125rem;[^}]*width: 5rem;/,
+      /@media \(max-width: 575\.98px\)[\s\S]*?\.clip-card-grid\s*\{[^}]*grid-template-columns:\s*1fr;/,
     );
-    expect(stylesheet).toContain('object-fit: cover;');
   });
 
   it('provides lightweight feedback for common controls and panel entry', () => {
