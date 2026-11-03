@@ -125,6 +125,22 @@ describe('portal shell integration', () => {
     );
   });
 
+  it('collapses and expands the desktop module rail', async () => {
+    installFetch({ modules: ['monitoring', 'administration'] });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByTestId('monitoring-module');
+
+    const shell = document.querySelector('.app-shell');
+    expect(shell).not.toHaveClass('is-sidebar-collapsed');
+    await user.click(screen.getByRole('button', { name: /Collapse module menu|Recolher menu de módulos/ }));
+    expect(shell).toHaveClass('is-sidebar-collapsed');
+    expect(localStorage.getItem('garage-watch.sidebar-collapsed.v1')).toBe('true');
+    expect(
+      screen.getByRole('button', { name: /Expand module menu|Expandir menu de módulos/ }),
+    ).toBeInTheDocument();
+  });
+
   it('persists theme and language changes through the portal API', async () => {
     localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
     const writes = installFetch({ modules: ['monitoring', 'administration'] });

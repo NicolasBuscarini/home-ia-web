@@ -59,6 +59,13 @@ function AppContent() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
   const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem('garage-watch.sidebar-collapsed.v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pollInFlight = useRef(false);
   const portalPreferencesReady = useRef(false);
@@ -308,8 +315,16 @@ function AppContent() {
     }
   }, [activeModule, administrationAllowed, monitoringAllowed]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('garage-watch.sidebar-collapsed.v1', String(sidebarCollapsed));
+    } catch {
+      // Local preference is optional; storage can be unavailable in private mode.
+    }
+  }, [sidebarCollapsed]);
+
   return (
-    <main className="container app-shell py-4 py-md-5">
+    <main className={`container app-shell py-4 py-md-5${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
       <AppHeader
         role={screen === 'authenticated' ? role : undefined}
         username={screen === 'authenticated' ? username : undefined}
@@ -347,19 +362,34 @@ function AppContent() {
             className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
             aria-label={t('shell.modules.label')}
           >
+            <button
+              className="module-nav-toggle"
+              type="button"
+              aria-pressed={sidebarCollapsed}
+              aria-label={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+              title={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            >
+              <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
+            </button>
             <ul className="nav nav-pills">
               {monitoringAllowed && (
                 <li className="nav-item">
                   <button
                     className={`nav-link ${activeModule === 'monitoring' ? 'active' : ''}`}
                     type="button"
+                    aria-label={t('shell.modules.monitoring')}
+                    title={t('shell.modules.monitoring')}
                     aria-current={activeModule === 'monitoring' ? 'page' : undefined}
                     onClick={() => {
                       setActiveModule('monitoring');
                       setMobileNavOpen(false);
                     }}
                   >
-                    {t('shell.modules.monitoring')}
+                    <span className="module-nav-icon" aria-hidden="true">
+                      ◉
+                    </span>
+                    <span className="module-nav-label">{t('shell.modules.monitoring')}</span>
                   </button>
                 </li>
               )}
@@ -368,13 +398,18 @@ function AppContent() {
                   <button
                     className={`nav-link ${activeModule === 'access' ? 'active' : ''}`}
                     type="button"
+                    aria-label={t('shell.modules.access')}
+                    title={t('shell.modules.access')}
                     aria-current={activeModule === 'access' ? 'page' : undefined}
                     onClick={() => {
                       setActiveModule('access');
                       setMobileNavOpen(false);
                     }}
                   >
-                    {t('shell.modules.access')}
+                    <span className="module-nav-icon" aria-hidden="true">
+                      ◫
+                    </span>
+                    <span className="module-nav-label">{t('shell.modules.access')}</span>
                   </button>
                 </li>
               )}
@@ -383,13 +418,18 @@ function AppContent() {
                   <button
                     className={`nav-link ${activeModule === 'systems' ? 'active' : ''}`}
                     type="button"
+                    aria-label={t('shell.modules.systems')}
+                    title={t('shell.modules.systems')}
                     aria-current={activeModule === 'systems' ? 'page' : undefined}
                     onClick={() => {
                       setActiveModule('systems');
                       setMobileNavOpen(false);
                     }}
                   >
-                    {t('shell.modules.systems')}
+                    <span className="module-nav-icon" aria-hidden="true">
+                      ⚙
+                    </span>
+                    <span className="module-nav-label">{t('shell.modules.systems')}</span>
                   </button>
                 </li>
               )}
