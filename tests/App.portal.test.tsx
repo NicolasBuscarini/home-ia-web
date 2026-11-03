@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -125,6 +125,40 @@ describe('portal shell integration', () => {
     );
   });
 
+  it('navigates user-facing sections as sidebar submodules and closes the mobile drawer on selection', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({ modules: ['monitoring', 'administration'] });
+    render(<App />);
+    const user = userEvent.setup();
+    const monitoring = await screen.findByTestId('monitoring-module');
+    expect(monitoring).toHaveAttribute('data-active-view', 'monitor');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    const subnav = within(nav).getByRole('list', { name: 'Submódulos de Monitoramento' });
+    expect(within(subnav).getByRole('button', { name: 'Monitoramento' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await user.click(within(subnav).getByRole('button', { name: 'Clipes' }));
+    expect(screen.getByTestId('monitoring-module')).toHaveAttribute('data-active-view', 'clips');
+
+    await user.click(within(nav).getByRole('button', { name: 'Acessos' }));
+    const access = await screen.findByTestId('access-module');
+    expect(access).toHaveAttribute('data-active-view', 'users');
+    const accessNav = within(nav).getByRole('list', { name: 'Submódulos de Acessos' });
+    await user.click(within(accessNav).getByRole('button', { name: 'Pedidos de acesso' }));
+    expect(screen.getByTestId('access-module')).toHaveAttribute('data-active-view', 'requests');
+
+    const menuButton = screen.getByRole('button', { name: 'Módulos da plataforma' });
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    await user.click(menuButton);
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    expect(nav).toHaveClass('is-open');
+    await user.click(within(nav).getByRole('button', { name: 'Sistemas' }));
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    expect(nav).not.toHaveClass('is-open');
+  });
+
   it('collapses and expands the desktop module rail', async () => {
     installFetch({ modules: ['monitoring', 'administration'] });
     render(<App />);
@@ -139,6 +173,28 @@ describe('portal shell integration', () => {
     expect(
       screen.getByRole('button', { name: /Expand module menu|Expandir menu de módulos/ }),
     ).toBeInTheDocument();
+  });
+
+  it('opens the ActivityWatch module only when the portal navigation authorizes it', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({ modules: ['monitoring', 'activitywatch'] });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    await user.click(within(nav).getByRole('button', { name: 'Atividade' }));
+    expect(await screen.findByTestId('activitywatch-module')).toHaveAttribute(
+      'data-module-ids',
+      'monitoring,activitywatch',
+    );
+
+    cleanup();
+    vi.restoreAllMocks();
+    installFetch({ modules: ['monitoring'] });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+    expect(screen.queryByRole('button', { name: 'Atividade' })).not.toBeInTheDocument();
   });
 
   it('persists theme and language changes through the portal API', async () => {

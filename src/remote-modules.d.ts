@@ -14,6 +14,14 @@ declare module 'platform/AccessModule' {
   export default AccessModule;
 }
 
+declare module 'activitywatch/ActivityWatchModule' {
+  import type { ComponentType } from 'react';
+  import type { ActivityWatchModuleProps } from './portal/activitywatchContract';
+
+  const ActivityWatchModule: ComponentType<ActivityWatchModuleProps>;
+  export default ActivityWatchModule;
+}
+
 declare module 'platform/SystemsModule' {
   import type { ComponentType } from 'react';
   import type { SystemsModuleProps } from './portal/platformContract';

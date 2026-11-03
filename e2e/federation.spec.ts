@@ -73,10 +73,29 @@ test.beforeEach(async ({ page }) => {
 test('loads the federated monitoring module through the shell', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.user-identity-name')).toHaveText('admin');
-  await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Módulos da plataforma' })).toBeVisible();
   await expect(page.getByText('garage-01')).toBeVisible();
   await expect(page.getByText('Módulo indisponível')).toHaveCount(0);
   await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
+});
+
+test('keeps the mobile module drawer closed until the sandwich button is activated', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.user-identity-name')).toHaveText('admin');
+
+  const nav = page.getByRole('navigation', { name: 'Módulos da plataforma' });
+  const button = page.getByRole('button', { name: 'Módulos da plataforma' });
+  await expect(nav).toBeHidden();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+
+  await button.click();
+  await expect(nav).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+
+  await nav.getByRole('button', { name: 'Sistemas' }).click();
+  await expect(nav).toBeHidden();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('keeps the shell accessible after the remote mounts', async ({ page }) => {

@@ -8,6 +8,7 @@ export default defineConfig({
       'monitoring/MonitoringModule': path.resolve(__dirname, 'tests/monitoringModuleStub.tsx'),
       'platform/AccessModule': path.resolve(__dirname, 'tests/accessModuleStub.tsx'),
       'platform/SystemsModule': path.resolve(__dirname, 'tests/systemsModuleStub.tsx'),
+      'activitywatch/ActivityWatchModule': path.resolve(__dirname, 'tests/activitywatchModuleStub.tsx'),
     },
     dedupe: ['react', 'react-dom'],
   },

@@ -13,6 +13,10 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_PLATFORM_REMOTE_URL ||
     env.VITE_PLATFORM_REMOTE_URL ||
     'http://127.0.0.1:5175/remoteEntry.js';
+  const activityWatchRemote =
+    process.env.VITE_ACTIVITYWATCH_REMOTE_URL ||
+    env.VITE_ACTIVITYWATCH_REMOTE_URL ||
+    'http://127.0.0.1:5176/remoteEntry.js';
   return {
     resolve: {
       dedupe: ['react', 'react-dom'],
@@ -34,6 +38,13 @@ export default defineConfig(({ mode }) => {
             name: 'home_ia_platform',
             entry: platformRemote,
             entryGlobalName: 'home_ia_platform',
+            shareScope: 'default',
+          },
+          activitywatch: {
+            type: 'module',
+            name: 'home_ia_activitywatch',
+            entry: activityWatchRemote,
+            entryGlobalName: 'home_ia_activitywatch',
             shareScope: 'default',
           },
         },

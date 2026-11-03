@@ -7,4 +7,6 @@ export interface MonitoringModuleProps {
   onCameraSelect: (cameraId: string) => void;
   userRole: UserRole;
   portalModuleIds?: string[];
+  activeView?: string;
+  onViewChange?: (view: string) => void;
 }

@@ -22,6 +22,6 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!dist", "!node_modules", "!coverage"]
+    "includes": ["**", "!dist", "!node_modules", "!coverage", "!test-results", "!playwright-report"]
   }
 }

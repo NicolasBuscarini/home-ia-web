@@ -1,4 +1,4 @@
-import type { AuthenticatedUser, CameraStatus, UserRole } from 'home-ia-shared';
+import type { AuthenticatedUser, CameraStatus, TranslationKey, UserRole } from 'home-ia-shared';
 import {
   ApiError,
   applyTheme,
@@ -24,9 +24,10 @@ import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from
 import { getOrCreateClientId } from './services/clientIdentity';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type ModuleView = 'monitoring' | 'access' | 'systems';
+type ModuleView = 'monitoring' | 'activitywatch' | 'access' | 'systems';
 
 const RemoteMonitoringModule = lazy(() => import('monitoring/MonitoringModule'));
+const RemoteActivityWatchModule = lazy(() => import('activitywatch/ActivityWatchModule'));
 const RemoteAccessModule = lazy(() => import('platform/AccessModule'));
 const RemoteSystemsModule = lazy(() => import('platform/SystemsModule'));
 
@@ -59,6 +60,8 @@ function AppContent() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
   const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
+  const [monitoringView, setMonitoringView] = useState('monitor');
+  const [accessView, setAccessView] = useState('users');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem('garage-watch.sidebar-collapsed.v1') === 'true';
@@ -303,17 +306,20 @@ function AppContent() {
   const selectedCamera = cameras.find((item) => item.cameraId === selectedCameraId);
   const isAdministrator = role === 'Administrator';
   const monitoringAllowed = canMonitor && (!portalModuleIds || portalModuleIds.includes('monitoring'));
+  const activityWatchAllowed =
+    isAdministrator && (!portalModuleIds || portalModuleIds.includes('activitywatch'));
   const administrationAllowed =
     isAdministrator && (!portalModuleIds || portalModuleIds.includes('administration'));
 
   useEffect(() => {
     const available: ModuleView[] = [];
     if (monitoringAllowed) available.push('monitoring');
+    if (activityWatchAllowed) available.push('activitywatch');
     if (administrationAllowed) available.push('access', 'systems');
     if (available.length > 0 && !available.includes(activeModule)) {
       setActiveModule(available[0] ?? 'monitoring');
     }
-  }, [activeModule, administrationAllowed, monitoringAllowed]);
+  }, [activeModule, activityWatchAllowed, administrationAllowed, monitoringAllowed]);
 
   useEffect(() => {
     try {
@@ -322,6 +328,64 @@ function AppContent() {
       // Local preference is optional; storage can be unavailable in private mode.
     }
   }, [sidebarCollapsed]);
+
+  const moduleItems: Array<{
+    id: ModuleView;
+    icon: string;
+    labelKey: TranslationKey;
+    visible: boolean;
+    views: Array<{ id: string; labelKey: TranslationKey }>;
+  }> = [
+    {
+      id: 'monitoring',
+      icon: '◉',
+      labelKey: 'shell.modules.monitoring',
+      visible: monitoringAllowed,
+      views: [
+        { id: 'monitor', labelKey: 'dashboard.menu.monitor' },
+        { id: 'clips', labelKey: 'dashboard.menu.clips' },
+      ],
+    },
+    {
+      id: 'activitywatch',
+      icon: '◔',
+      labelKey: 'shell.modules.activitywatch',
+      visible: activityWatchAllowed,
+      views: [],
+    },
+    {
+      id: 'access',
+      icon: '◫',
+      labelKey: 'shell.modules.access',
+      visible: administrationAllowed,
+      views: [
+        { id: 'users', labelKey: 'dashboard.menu.users' },
+        { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
+        { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
+      ],
+    },
+    {
+      id: 'systems',
+      icon: '⚙',
+      labelKey: 'shell.modules.systems',
+      visible: administrationAllowed,
+      views: [],
+    },
+  ];
+
+  function selectModule(module: ModuleView) {
+    setActiveModule(module);
+    if (module === 'monitoring') setMonitoringView('monitor');
+    if (module === 'access') setAccessView('users');
+    setMobileNavOpen(false);
+  }
+
+  function selectSubmodule(module: ModuleView, view: string) {
+    setActiveModule(module);
+    if (module === 'monitoring') setMonitoringView(view);
+    if (module === 'access') setAccessView(view);
+    setMobileNavOpen(false);
+  }
 
   return (
     <main className={`container app-shell py-4 py-md-5${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
@@ -346,97 +410,90 @@ function AppContent() {
       {screen === 'authenticated' && role && !canMonitor && (
         <UserLanding canRequestAccess={role === 'User'} />
       )}
-      {screen === 'authenticated' && role && (monitoringAllowed || administrationAllowed) && (
-        <>
-          <button
-            className="module-menu-button"
-            type="button"
-            aria-expanded={mobileNavOpen}
-            aria-controls="module-navigation"
-            onClick={() => setMobileNavOpen((open) => !open)}
-          >
-            <span aria-hidden="true">☰</span> {t('shell.modules.label')}
-          </button>
-          <nav
-            id="module-navigation"
-            className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
-            aria-label={t('shell.modules.label')}
-          >
+      {screen === 'authenticated' &&
+        role &&
+        (monitoringAllowed || activityWatchAllowed || administrationAllowed) && (
+          <>
             <button
-              className="module-nav-toggle"
+              className="module-menu-button"
               type="button"
-              aria-pressed={sidebarCollapsed}
-              aria-label={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
-              title={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              aria-expanded={mobileNavOpen}
+              aria-controls="module-navigation"
+              onClick={() => setMobileNavOpen((open) => !open)}
             >
-              <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
+              <span aria-hidden="true">☰</span> {t('shell.modules.label')}
             </button>
-            <ul className="nav nav-pills">
-              {monitoringAllowed && (
-                <li className="nav-item">
-                  <button
-                    className={`nav-link ${activeModule === 'monitoring' ? 'active' : ''}`}
-                    type="button"
-                    aria-label={t('shell.modules.monitoring')}
-                    title={t('shell.modules.monitoring')}
-                    aria-current={activeModule === 'monitoring' ? 'page' : undefined}
-                    onClick={() => {
-                      setActiveModule('monitoring');
-                      setMobileNavOpen(false);
-                    }}
-                  >
-                    <span className="module-nav-icon" aria-hidden="true">
-                      ◉
-                    </span>
-                    <span className="module-nav-label">{t('shell.modules.monitoring')}</span>
-                  </button>
-                </li>
-              )}
-              {administrationAllowed && (
-                <li className="nav-item">
-                  <button
-                    className={`nav-link ${activeModule === 'access' ? 'active' : ''}`}
-                    type="button"
-                    aria-label={t('shell.modules.access')}
-                    title={t('shell.modules.access')}
-                    aria-current={activeModule === 'access' ? 'page' : undefined}
-                    onClick={() => {
-                      setActiveModule('access');
-                      setMobileNavOpen(false);
-                    }}
-                  >
-                    <span className="module-nav-icon" aria-hidden="true">
-                      ◫
-                    </span>
-                    <span className="module-nav-label">{t('shell.modules.access')}</span>
-                  </button>
-                </li>
-              )}
-              {administrationAllowed && (
-                <li className="nav-item">
-                  <button
-                    className={`nav-link ${activeModule === 'systems' ? 'active' : ''}`}
-                    type="button"
-                    aria-label={t('shell.modules.systems')}
-                    title={t('shell.modules.systems')}
-                    aria-current={activeModule === 'systems' ? 'page' : undefined}
-                    onClick={() => {
-                      setActiveModule('systems');
-                      setMobileNavOpen(false);
-                    }}
-                  >
-                    <span className="module-nav-icon" aria-hidden="true">
-                      ⚙
-                    </span>
-                    <span className="module-nav-label">{t('shell.modules.systems')}</span>
-                  </button>
-                </li>
-              )}
-            </ul>
-          </nav>
-        </>
-      )}
+            <nav
+              id="module-navigation"
+              className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
+              aria-label={t('shell.modules.label')}
+            >
+              <button
+                className="module-nav-toggle"
+                type="button"
+                aria-pressed={sidebarCollapsed}
+                aria-label={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+                title={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              >
+                <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
+              </button>
+              <ul className="nav nav-pills">
+                {moduleItems
+                  .filter((item) => item.visible)
+                  .map((item) => {
+                    const isActive = activeModule === item.id;
+                    const activeView =
+                      item.id === 'monitoring'
+                        ? monitoringView
+                        : item.id === 'access'
+                          ? accessView
+                          : undefined;
+                    return (
+                      <li
+                        className={`nav-item${item.views.length > 0 ? ' module-nav-group' : ''}`}
+                        key={item.id}
+                      >
+                        <button
+                          className={`nav-link ${isActive ? 'active' : ''}`}
+                          type="button"
+                          aria-label={t(item.labelKey)}
+                          title={t(item.labelKey)}
+                          aria-current={isActive ? 'page' : undefined}
+                          onClick={() => selectModule(item.id)}
+                        >
+                          <span className="module-nav-icon" aria-hidden="true">
+                            {item.icon}
+                          </span>
+                          <span className="module-nav-label">{t(item.labelKey)}</span>
+                        </button>
+                        {isActive && item.views.length > 0 && (
+                          <ul
+                            className="nav module-subnav"
+                            aria-label={t('shell.modules.submodules', { module: t(item.labelKey) })}
+                          >
+                            {item.views.map((view) => (
+                              <li className="nav-item" key={view.id}>
+                                <button
+                                  className={`nav-link ${activeView === view.id ? 'active' : ''}`}
+                                  type="button"
+                                  id={`module-subnav-${item.id}-${view.id}`}
+                                  aria-current={activeView === view.id ? 'page' : undefined}
+                                  onClick={() => selectSubmodule(item.id, view.id)}
+                                >
+                                  {t(view.labelKey)}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </nav>
+          </>
+        )}
       <div className="app-content">
         {screen === 'authenticated' && role && activeModule === 'monitoring' && monitoringAllowed && (
           <PortalModuleBoundary moduleId="monitoring">
@@ -448,14 +505,29 @@ function AppContent() {
                 onCameraSelect={setSelectedCameraId}
                 userRole={role}
                 portalModuleIds={portalModuleIds}
+                activeView={monitoringView}
+                onViewChange={setMonitoringView}
               />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+        {screen === 'authenticated' && role && activeModule === 'activitywatch' && activityWatchAllowed && (
+          <PortalModuleBoundary moduleId="activitywatch">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteActivityWatchModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
             </Suspense>
           </PortalModuleBoundary>
         )}
         {screen === 'authenticated' && role && activeModule === 'access' && administrationAllowed && (
           <PortalModuleBoundary moduleId="access">
             <Suspense fallback={<ModuleLoading />}>
-              <RemoteAccessModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
+              <RemoteAccessModule
+                locale={locale}
+                userRole={role}
+                portalModuleIds={portalModuleIds}
+                activeView={accessView}
+                onViewChange={setAccessView}
+              />
             </Suspense>
           </PortalModuleBoundary>
         )}
