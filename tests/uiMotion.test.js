@@ -30,13 +30,15 @@ describe('UI motion accessibility contract', () => {
   it('adds theme-driven ambient lighting and neon accents without a runtime dependency', () => {
     expect(stylesheet).toContain('body::before');
     expect(stylesheet).toContain('ellipse 42rem 34rem at 8% 6%');
-    expect(stylesheet).toContain('animation: ambient-drift 28s ease-in-out');
-    expect(stylesheet).toContain('animation: light-drift 36s ease-in-out infinite alternate');
+    expect(stylesheet).toContain('animation: ambient-drift var(--style-ambient-duration) ease-in-out');
+    expect(stylesheet).toContain(
+      'animation: light-drift var(--style-ambient-duration) ease-in-out infinite alternate',
+    );
     expect(stylesheet).toContain('@keyframes light-drift');
     expect(stylesheet).toContain('color-mix(in srgb, var(--accent) 27%, transparent)');
     expect(stylesheet).toContain('color-mix(in srgb, var(--accent-strong) 22%, transparent)');
     expect(stylesheet).toContain('opacity: 0.7');
-    expect(stylesheet).toContain('animation: brand-glow 7s ease-in-out');
+    expect(stylesheet).toContain('--style-brand-animation: brand-glow 7s ease-in-out');
     expect(stylesheet).toContain('0 0 34px color-mix(in srgb, var(--accent) 12%, transparent)');
   });
 
@@ -98,5 +100,51 @@ describe('UI motion accessibility contract', () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition-duration: 0\.01ms/,
     );
     expect(stylesheet).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?transform: none/);
+  });
+});
+
+describe('Theme style contract', () => {
+  const styles = ['classic', 'modern', 'rustic', 'corporate', 'minimal'];
+
+  const block = (style) =>
+    new RegExp(`\\[data-theme-style="${style}"\\]\\s*\\{([^}]*)\\}`, 's').exec(stylesheet)?.[1] ?? '';
+
+  const token = (style, name) => new RegExp(`${name}:\\s*([^;]+);`).exec(block(style))?.[1]?.trim();
+
+  it('defines a distinct token block for every selectable style', () => {
+    for (const style of styles) {
+      expect(stylesheet).toContain(`[data-theme-style="${style}"]`);
+      expect(token(style, '--style-radius-card')).toBeTruthy();
+    }
+  });
+
+  it('makes the style families visibly different in shape, border and motion', () => {
+    const radii = styles.map((style) => token(style, '--style-radius-card'));
+    const motions = styles.map((style) => token(style, '--style-motion'));
+    expect(new Set(radii).size).toBe(styles.length);
+    expect(new Set(motions).size).toBe(styles.length);
+    expect(token('rustic', '--style-border-width')).toBe('2px');
+    expect(token('corporate', '--style-border-width-strong')).toBe('2px');
+    expect(token('minimal', '--style-radius-card')).toBe('0px');
+    expect(token('modern', '--style-button-radius')).toBe('999px');
+    expect(token('corporate', '--style-button-transform')).toBe('uppercase');
+    expect(token('classic', '--style-hover-lift')).toBe('-1px');
+    expect(token('minimal', '--style-hover-lift')).toBe('0px');
+  });
+
+  it('runs component form through shared tokens instead of per-style component copies', () => {
+    expect(stylesheet).toContain('--style-border-style');
+    expect(stylesheet).toContain('--style-radius-card');
+    expect(stylesheet).toContain('--style-button-radius');
+    expect(stylesheet).toContain('--style-motion');
+    expect(stylesheet).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--style-button-radius\);/s);
+    expect(stylesheet).toMatch(/\.panel-card[\s\S]*?border-width:\s*var\(--style-border-width\);/);
+  });
+
+  it('keeps focus and reduced-motion guarantees for every style', () => {
+    expect(stylesheet).toMatch(
+      /:is\([^)]*\):focus-visible\s*\{[^}]*outline-width:\s*var\(--style-focus-width\);/s,
+    );
+    expect(stylesheet).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });

@@ -3,8 +3,8 @@
 ## Autoridade e fronteiras
 
 - Repositório público independente da interface React do Home IA; `../../docs/` no repositório de contexto é a autoridade de produto, segurança e arquitetura.
-- Em `T16-D`, a UI consome a projeção do portal (`/api/v1/portal/navigation`, `/api/v1/portal/preferences`) e carrega o módulo de Monitoramento por Module Federation a partir de `home-ia-monitoring-web` (`VITE_MONITORING_REMOTE_URL`). O `PortalModuleBoundary` isola falhas; o código de monitoramento não pertence mais a este shell. i18n/tema/HTTP/tipos/StatusBadge/CSS vêm de `home-ia-shared`, compartilhado como singleton. O ensaio federado/a11y é `./garage test-federation-web`; o diretório/package local já é `home-ia-web`, mas o remoto GitHub/submodule ainda é legado até `T16-F`.
-- A API em `garage-watch-platform` continua autoridade de sessão, papéis, câmera, health e mídia. Não duplicar regras de autorização nem incorporar segredos no bundle.
+- Em `T16-D`, a UI consome a projeção do portal (`/api/v1/portal/navigation`, `/api/v1/portal/preferences`) e carrega o módulo de Monitoramento por Module Federation a partir de `home-ia-monitoring-web` (`VITE_MONITORING_REMOTE_URL`). O `PortalModuleBoundary` isola falhas; o código de monitoramento não pertence mais a este shell. i18n/tema/HTTP/tipos/StatusBadge/CSS vêm de `home-ia-shared`, compartilhado como singleton. O ensaio federado/a11y é `./garage test-federation-web` e cobre os remotes de Monitoramento (5184), Atividade (5185) e Plataforma (5186) servidos por preview isolado, inclusive o agregado de saúde; o diretório/package local já é `home-ia-web`.
+- A API em `home-ia-portal` continua autoridade de sessão, papéis, câmera, health e mídia. Não duplicar regras de autorização nem incorporar segredos no bundle.
 - Em produção, o bundle é servido pelo host da API same-origin; manter cookies, HLS, cadastro e Origin no mesmo host. Vite usa proxy somente para desenvolvimento local.
 - Usuário `User` não recebe câmera. Não chamar catálogo/ready/live para a landing sem acesso; esconder UI nunca substitui autorização do servidor.
 - Mídia, credenciais, dados pessoais e `.env` não entram no repositório.
@@ -18,7 +18,7 @@
 - Regras do player HLS pertencem ao repositório `home-ia-monitoring-web`; o shell não deve reintroduzir cópia local do player sem decisão de migração.
 - O ID de presença é um UUID aleatório, efêmero por aba, guardado somente em `sessionStorage` para sobreviver a reloads da mesma aba e evitar leases duplicados durante o TTL do servidor. Nunca é credencial nem deve ir a localStorage/cookie/API de perfil; se sessionStorage estiver indisponível, a estabilidade fica limitada ao carregamento atual. Não alterar sem decisão o heartbeat/TTL/contagem server-side.
 - Todo texto visível/ARIA deve vir do catálogo tipado `src/i18n/messages.ts`; usar `useI18n()` em componentes sem propagar idioma manualmente. Ao adicionar chave, preencher `pt-BR` e `en-US`; manter interpolação para valores e evitar lógica/código duplicado por idioma. Persistência e detecção de idioma ficam centralizadas em `src/i18n/i18n.tsx`.
-- Testar fluxos observáveis com Vitest/Testing Library. Os testes deste projeto complementam, não substituem, a integração da API real em `garage-watch-platform`.
+- Testar fluxos observáveis com Vitest/Testing Library. Os testes deste projeto complementam, não substituem, a integração da API real em `home-ia-portal`.
 - Fixar Node, dependências e imagens por versão/hash quando selecionados; Compose é o ambiente documentado de instalação/verificação.
 
 ## Verificações

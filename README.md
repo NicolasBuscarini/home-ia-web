@@ -1,6 +1,6 @@
 # garage-watch-web
 
-Frontend React/TypeScript do **Home IA**, mantido neste repositório independente e integrado à API `garage-watch-platform`.
+Frontend React/TypeScript do **Home IA**, mantido neste repositório independente e integrado à API `home-ia-portal`.
 
 ## Portal (T16-D concluída no escopo local)
 
@@ -8,7 +8,7 @@ A UI atual passou a consumir a projeção do portal: após autenticar, busca `GE
 
 O shell carrega o módulo de Monitoramento por **Module Federation** a partir de `home-ia-monitoring-web` (`VITE_MONITORING_REMOTE_URL`, default `http://127.0.0.1:5174/remoteEntry.js`). O código de monitoramento foi removido do shell e os testes de domínio foram movidos para o remote; uma falha de carregamento mostra o estado de módulo indisponível do `PortalModuleBoundary`. A autorização continua no servidor.
 
-A composição federada usa `home-ia-shared` para i18n, tema, HTTP, tipos, `StatusBadge` e CSS global, compartilhado como singleton. `./garage test-federation-web` builda shared/remote/shell, sobe previews isolados e valida o carregamento em Chromium com axe WCAG 2.0 A/AA (sem contraste) e teclado. A inspeção visual manual em dispositivos, contraste e CT02 continuam pendentes. A renomeação do repositório GitHub/submodule/URLs pertence a `T16-F`. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
+A composição federada usa `home-ia-shared` para i18n, tema, HTTP, tipos, `StatusBadge` e CSS global, compartilhado como singleton. `./garage test-federation-web` builda shared, os remotes de Monitoramento, Atividade e Plataforma e o shell, sobe previews isolados (shell 5183, Monitoramento 5184, ActivityWatch 5185, Plataforma 5186) e valida o carregamento federado dos três módulos em Chromium com axe WCAG 2.0 A/AA (sem contraste) e teclado, incluindo o agregado de saúde do portal com estados saudável/degradado e erro sanitizado. A inspeção visual manual em dispositivos, contraste e CT02 continuam pendentes. A renomeação do repositório GitHub/submodule/URLs pertence a `T16-F`. A aplicação continua same-origin em produção: ASP.NET Core serve o bundle estático, API, cookie de sessão e gateway HLS. Este projeto não implementa autenticação/autorização próprias.
 
 ## Tecnologias
 
@@ -21,7 +21,7 @@ A composição federada usa `home-ia-shared` para i18n, tema, HTTP, tipos, `Stat
 
 ## Desenvolvimento
 
-Clone `garage-watch-platform` com seus submódulos (`git clone --recurse-submodules ...`). Para desenvolver com HMR e API real, inicie o profile `web-dev` documentado no runbook da plataforma. O proxy do Vite encaminha `/api/*` e `/health/*` ao host API sem mudar o Host do navegador; o browser continua usando uma única origem local e o cookie HttpOnly.
+Clone `home-ia-portal` com seus submódulos (`git clone --recurse-submodules ...`). Para desenvolver com HMR e API real, inicie o profile `web-dev` documentado no runbook da plataforma. O proxy do Vite encaminha `/api/*` e `/health/*` ao host API sem mudar o Host do navegador; o browser continua usando uma única origem local e o cookie HttpOnly.
 
 Verificações isoladas deste repositório, via Compose:
 
@@ -33,7 +33,7 @@ O comando instala somente conforme `package-lock.json`, verifica lint/formataç�
 
 ## Integração de produção
 
-`garage-watch-platform` fixa este projeto como submódulo Git em um commit revisado. O build Docker executa `npm ci`/Vite e copia apenas os arquivos estáticos para o webroot do host API. Atualizações de UI exigem atualizar o ponteiro do submódulo e passar também pelos testes de integração da API.
+`home-ia-portal` fixa este projeto como submódulo Git em um commit revisado. O build Docker executa `npm ci`/Vite e copia apenas os arquivos estáticos para o webroot do host API. Atualizações de UI exigem atualizar o ponteiro do submódulo e passar também pelos testes de integração da API.
 
 Temas disponíveis: Bosque (padrão), Grafite, Oceano, Claro, Lavanda, Pôr do sol, Âmbar e Rosa. O seletor apresenta amostras de fundo, painel e cor de destaque junto a uma mini prévia; a seleção é local ao browser e não afeta configurações/contas no servidor.
 

@@ -99,6 +99,10 @@ export function ThemeSelector({ value, onChange, style, onStyleChange }: ThemeSe
                       backgroundColor: candidate.preview.background,
                       borderColor: candidate.preview.accent,
                       borderRadius: candidate.preview.radius,
+                      borderWidth: candidate.preview.borderWidth,
+                      fontFamily: candidate.preview.fontFamily,
+                      fontWeight: candidate.preview.fontWeight,
+                      letterSpacing: candidate.preview.letterSpacing,
                     }}
                   >
                     {candidate.preview.label}
