@@ -8,4 +8,6 @@ export interface MonitoringModuleProps {
   userRole: UserRole;
   portalModuleIds?: string[];
   activeView?: string;
+  deepLinkParams?: Record<string, string>;
+  onDeepLinkParamsChange?: (params: Record<string, string>) => void;
 }

@@ -7,10 +7,13 @@ import {
   I18nProvider,
   isLocale,
   isThemeId,
+  moduleDeepLinkParams,
+  parseDeepLink,
   postJson,
   readSavedTheme,
   readSavedThemeStyle,
   request,
+  serializeDeepLink,
   type ThemeId,
   type ThemeStyleId,
   useI18n,
@@ -61,9 +64,21 @@ function AppContent() {
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
   const [portalSubmodules, setPortalSubmodules] =
     useState<Record<string, Array<{ id: string; labelKey: string }>>>();
-  const [activeModule, setActiveModule] = useState<ModuleView>('monitoring');
-  const [monitoringView, setMonitoringView] = useState('monitor');
-  const [accessView, setAccessView] = useState('users');
+  const [initialLink] = useState(() => parseDeepLink(window.location.search));
+  const [activeModule, setActiveModule] = useState<ModuleView>(() => {
+    const requested = initialLink.module;
+    return requested === 'monitoring' ||
+      requested === 'activitywatch' ||
+      requested === 'access' ||
+      requested === 'systems'
+      ? requested
+      : 'monitoring';
+  });
+  const [monitoringView, setMonitoringView] = useState(() => initialLink.view ?? 'monitor');
+  const [moduleParams, setModuleParams] = useState<Record<string, string>>(() =>
+    moduleDeepLinkParams(initialLink),
+  );
+  const [accessView, setAccessView] = useState(() => initialLink.view ?? 'users');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem('garage-watch.sidebar-collapsed.v1') === 'true';
@@ -117,6 +132,7 @@ function AppContent() {
       // The legacy dashboard remains usable if the portal projection is unavailable.
       setPortalModuleIds(undefined);
       setPortalSubmodules(undefined);
+      setModuleParams({});
     }
   }, [setLocale]);
 
@@ -155,6 +171,7 @@ function AppContent() {
       setClientCount(undefined);
       setPortalModuleIds(undefined);
       setPortalSubmodules(undefined);
+      setModuleParams({});
       setScreen('anonymous');
       return;
     }
@@ -194,6 +211,7 @@ function AppContent() {
           setClientCount(undefined);
           setPortalModuleIds(undefined);
           setPortalSubmodules(undefined);
+          setModuleParams({});
           return;
         }
         const cameraList = await getJson<CameraStatus[]>('/api/v1/cameras');
@@ -230,6 +248,7 @@ function AppContent() {
             setClientCount(undefined);
             setPortalModuleIds(undefined);
             setPortalSubmodules(undefined);
+            setModuleParams({});
           } else setError(t('app.error.offline'));
         }
       } finally {
@@ -371,6 +390,39 @@ function AppContent() {
         { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
         { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
       ];
+  useEffect(() => {
+    const search =
+      screen === 'authenticated'
+        ? serializeDeepLink({
+            module: activeModule,
+            view:
+              activeModule === 'monitoring'
+                ? monitoringView
+                : activeModule === 'access'
+                  ? accessView
+                  : undefined,
+            ...moduleParams,
+          })
+        : '';
+    const next = `${window.location.pathname}${search}`;
+    if (`${window.location.pathname}${window.location.search}` !== next) {
+      window.history.replaceState(null, '', next);
+    }
+  }, [screen, activeModule, monitoringView, accessView, moduleParams]);
+
+  const appliedLink = useRef(false);
+  useEffect(() => {
+    if (appliedLink.current || !portalSubmodules || screen !== 'authenticated') return;
+    appliedLink.current = true;
+    const views =
+      activeModule === 'monitoring' ? monitoringViews : activeModule === 'access' ? accessViews : [];
+    if (views.length === 0) return;
+    const current = activeModule === 'monitoring' ? monitoringView : accessView;
+    if (views.some((view) => view.id === current)) return;
+    if (activeModule === 'monitoring') setMonitoringView(views[0]?.id ?? 'monitor');
+    if (activeModule === 'access') setAccessView(views[0]?.id ?? 'users');
+  }, [screen, portalSubmodules, activeModule, monitoringViews, accessViews, monitoringView, accessView]);
+
   const moduleItems: Array<{
     id: ModuleView;
     icon: string;
@@ -410,6 +462,7 @@ function AppContent() {
 
   function selectModule(module: ModuleView) {
     setActiveModule(module);
+    setModuleParams({});
     if (module === 'monitoring') setMonitoringView('monitor');
     if (module === 'access') setAccessView('users');
     setMobileNavOpen(false);
@@ -417,6 +470,7 @@ function AppContent() {
 
   function selectSubmodule(module: ModuleView, view: string) {
     setActiveModule(module);
+    setModuleParams({});
     if (module === 'monitoring') setMonitoringView(view);
     if (module === 'access') setAccessView(view);
     setMobileNavOpen(false);
@@ -541,6 +595,8 @@ function AppContent() {
                 userRole={role}
                 portalModuleIds={portalModuleIds}
                 activeView={monitoringView}
+                deepLinkParams={moduleParams}
+                onDeepLinkParamsChange={setModuleParams}
               />
             </Suspense>
           </PortalModuleBoundary>

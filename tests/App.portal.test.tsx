@@ -9,6 +9,7 @@ afterEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute('data-theme');
   document.documentElement.removeAttribute('data-bs-theme');
+  window.history.replaceState(null, '', '/');
 });
 
 function json(body: unknown, status = 200): Response {
@@ -317,5 +318,32 @@ describe('portal shell integration', () => {
       target: { value: 'en-US' },
     });
     await waitFor(() => expect(writes.some((body) => body.languageTag === 'en-US')).toBe(true));
+  });
+
+  it('opens a module, view and module-specific selection from the URL', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    window.history.replaceState(null, '', '/?module=monitoring&view=clips&clip=CLP000000000001');
+    installFetch({ modules: ['monitoring', 'administration'] });
+    render(<App />);
+
+    const monitoring = await screen.findByTestId('monitoring-module');
+    expect(monitoring).toHaveAttribute('data-active-view', 'clips');
+    expect(JSON.parse(monitoring.getAttribute('data-deep-link') ?? '{}')).toEqual({
+      clip: 'CLP000000000001',
+    });
+  });
+
+  it('keeps the browser URL in sync with the selected module and view', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({ modules: ['monitoring', 'administration'] });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    const subnav = within(nav).getByRole('list', { name: 'Submódulos de Monitoramento' });
+    await user.click(within(subnav).getByRole('button', { name: 'Clipes' }));
+
+    await waitFor(() => expect(window.location.search).toBe('?module=monitoring&view=clips'));
   });
 });

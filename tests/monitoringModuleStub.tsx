@@ -6,12 +6,14 @@ export default function MonitoringModuleStub({
   userRole,
   portalModuleIds,
   activeView,
+  deepLinkParams,
 }: MonitoringModuleProps) {
   return (
     <section
       aria-label="Módulo de monitoramento remoto"
       data-module-ids={portalModuleIds?.join(',') ?? ''}
       data-active-view={activeView ?? ''}
+      data-deep-link={JSON.stringify(deepLinkParams ?? {})}
       data-testid="monitoring-module"
     >
       <p>{userRole}</p>
