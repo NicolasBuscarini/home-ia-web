@@ -1,5 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+const expectNoHorizontalOverflow = async (page: Page) => {
+  const hasOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  );
+  expect(hasOverflow).toBe(false);
+};
 
 const json = (body: unknown) => ({
   status: 200,
@@ -190,10 +197,7 @@ test('keeps the shell accessible after the remote mounts', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('garage-01')).toBeVisible();
 
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa'])
-    .disableRules(['color-contrast'])
-    .analyze();
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 
   await page.locator('#language-select').focus();
@@ -219,10 +223,7 @@ test('keeps the activity watch module accessible', async ({ page }) => {
   await page.getByRole('button', { name: 'Atividade' }).click();
   await expect(page.getByRole('row', { name: /Ptyxis/ })).toBeVisible();
 
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa'])
-    .disableRules(['color-contrast'])
-    .analyze();
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 
   await page.getByRole('button', { name: 'Atualizar' }).focus();
@@ -272,9 +273,53 @@ test('keeps the administration health view accessible', async ({ page }) => {
   await page.getByRole('button', { name: 'Verificar saúde' }).click();
   await expect(page.getByText('Estado agregado: Degradado · Portal: Saudável')).toBeVisible();
 
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa'])
-    .disableRules(['color-contrast'])
-    .analyze();
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+});
+
+test('captures assisted inspection evidence for desktop, mobile and reflow', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Sistemas' }).click();
+  await page.getByRole('button', { name: 'Verificar saúde' }).click();
+  await expect(page.getByText('Estado agregado: Degradado · Portal: Saudável')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('health-desktop.png'), fullPage: true });
+  await expectNoHorizontalOverflow(page);
+
+  const healthButton = page.getByRole('button', { name: 'Verificar saúde' });
+  await healthButton.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const focusState = await healthButton.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      focusVisible: element.matches(':focus-visible'),
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      boxShadow: style.boxShadow,
+    };
+  });
+  expect(focusState.focusVisible, `keyboard focus must be visible: ${JSON.stringify(focusState)}`).toBe(true);
+  expect(
+    focusState.outlineStyle !== 'none' || focusState.boxShadow !== 'none',
+    `focused button must expose a visible focus indicator: ${JSON.stringify(focusState)}`,
+  ).toBe(true);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Módulos da plataforma' }).click();
+  await page.getByRole('button', { name: 'Atividade' }).click();
+  await expect(page.getByRole('heading', { name: 'Atividade do dispositivo' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('activity-mobile.png'), fullPage: true });
+  await expectNoHorizontalOverflow(page);
+
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Módulos da plataforma' }).click();
+  await page.getByRole('button', { name: 'Sistemas' }).click();
+  await expect(page.getByRole('heading', { name: 'Sistemas e integrações' })).toBeVisible();
+  await page.getByRole('button', { name: 'Verificar saúde' }).click();
+  await expect(page.getByText('Estado agregado: Degradado · Portal: Saudável')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('health-reflow-320.png'), fullPage: true });
+  await expectNoHorizontalOverflow(page);
 });
