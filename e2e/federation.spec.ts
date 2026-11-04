@@ -43,6 +43,16 @@ test.beforeEach(async ({ page }) => {
             route: '/modules/monitoring',
           },
           {
+            moduleId: 'activitywatch',
+            displayNameKey: 'modules.activitywatch.name',
+            contractVersion: '1.0',
+            menuGroup: 'overview',
+            menuOrder: 20,
+            menuIcon: 'activity',
+            menuLabelKey: 'modules.activitywatch.menu',
+            route: '/modules/activitywatch',
+          },
+          {
             moduleId: 'administration',
             displayNameKey: 'modules.administration.name',
             contractVersion: '1.0',
@@ -51,6 +61,84 @@ test.beforeEach(async ({ page }) => {
             menuIcon: 'settings',
             menuLabelKey: 'modules.administration.menu',
             route: '/modules/administration',
+          },
+        ],
+      }),
+    ),
+  );
+  await page.route('**/api/v1/portal/modules/activitywatch/summary', (route) =>
+    route.fulfill(
+      json({
+        schemaVersion: '1.0',
+        moduleId: 'activitywatch',
+        reachable: true,
+        generatedAtUtc: '2026-11-03T12:00:00Z',
+        windowStartUtc: '2026-11-03T08:00:00Z',
+        windowEndUtc: '2026-11-03T12:00:00Z',
+        totalActiveSeconds: 5400,
+        truncated: false,
+        applications: [{ app: 'Ptyxis', seconds: 3600, eventCount: 12 }],
+        errorCode: null,
+      }),
+    ),
+  );
+  await page.route('**/api/v1/admin/portal-modules?page=1&pageSize=100', (route) =>
+    route.fulfill(
+      json({
+        items: [
+          {
+            moduleId: 'monitoring',
+            displayNameKey: 'modules.monitoring.name',
+            contractVersion: '1.0',
+            apiBaseUrl: '/',
+            healthPath: '/api/v1/portal/modules/monitoring/health',
+            requiredPermission: 'monitoring.read',
+            menuGroup: 'overview',
+            menuOrder: 10,
+            menuIcon: 'camera',
+            menuLabelKey: 'modules.monitoring.menu',
+            isEnabled: true,
+            version: 1,
+            createdAtUtc: '2026-11-02T12:00:00Z',
+            updatedAtUtc: '2026-11-02T12:00:00Z',
+          },
+        ],
+        page: 1,
+        pageSize: 100,
+        totalCount: 1,
+      }),
+    ),
+  );
+  await page.route('**/api/v1/portal/health', (route) =>
+    route.fulfill(
+      json({
+        schemaVersion: '1.0',
+        residenceId: 'home',
+        generatedAtUtc: '2026-11-04T12:00:00Z',
+        portalStatus: 'healthy',
+        status: 'degraded',
+        modules: [
+          {
+            moduleId: 'monitoring',
+            kind: 'module',
+            status: 'healthy',
+            enabled: true,
+            contractVersion: '1.0',
+            latencyMs: 12,
+            checkedAtUtc: '2026-11-04T12:00:00Z',
+            errorCode: null,
+            capabilities: ['live.hls.read'],
+          },
+          {
+            moduleId: 'activitywatch',
+            kind: 'integration',
+            status: 'unavailable',
+            enabled: true,
+            contractVersion: '1.0',
+            latencyMs: 500,
+            checkedAtUtc: '2026-11-04T12:00:00Z',
+            errorCode: 'activitywatch_timeout',
+            capabilities: [],
           },
         ],
       }),
@@ -112,4 +200,81 @@ test('keeps the shell accessible after the remote mounts', async ({ page }) => {
   await page.keyboard.press('Tab');
   const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? '');
   expect(['SUMMARY', 'BUTTON']).toContain(focusedTag);
+});
+
+test('loads the federated activity watch module through the shell', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.user-identity-name')).toHaveText('admin');
+
+  await page.getByRole('button', { name: 'Atividade' }).focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByRole('heading', { name: 'Atividade do dispositivo' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Ptyxis/ })).toBeVisible();
+  await expect(page.getByText('Módulo indisponível')).toHaveCount(0);
+});
+
+test('keeps the activity watch module accessible', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Atividade' }).click();
+  await expect(page.getByRole('row', { name: /Ptyxis/ })).toBeVisible();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .disableRules(['color-contrast'])
+    .analyze();
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+
+  await page.getByRole('button', { name: 'Atualizar' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('row', { name: /Ptyxis/ })).toBeVisible();
+});
+
+test('loads the federated administration module and the aggregated health report', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.user-identity-name')).toHaveText('admin');
+
+  await page.getByRole('button', { name: 'Sistemas' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Sistemas e integrações' })).toBeVisible();
+  await expect(page.getByText('Módulo indisponível')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Verificar saúde' }).click();
+
+  await expect(page.getByText('Estado agregado: Degradado · Portal: Saudável')).toBeVisible();
+  const health = page.getByRole('region', { name: 'Saúde do portal e módulos' });
+  await expect(health.getByRole('row', { name: /monitoring/ })).toBeVisible();
+  await expect(health.getByRole('row', { name: /activitywatch/ })).toBeVisible();
+  await expect(health.getByText('activitywatch_timeout')).toBeVisible();
+  await expect(health.getByText('12 ms')).toBeVisible();
+});
+
+test('shows a sanitized error when the aggregated health report fails', async ({ page }) => {
+  await page.route('**/api/v1/portal/health', (route) => route.fulfill({ status: 503, body: '' }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Sistemas' }).click();
+  await expect(page.getByRole('heading', { name: 'Sistemas e integrações' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Verificar saúde' }).click();
+
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Não foi possível ler o relatório de saúde.' }),
+  ).toBeVisible();
+  const health = page.getByRole('region', { name: 'Saúde do portal e módulos' });
+  await expect(health.getByRole('button', { name: 'Tentar novamente' })).toBeVisible();
+});
+
+test('keeps the administration health view accessible', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Sistemas' }).click();
+  await expect(page.getByRole('heading', { name: 'Sistemas e integrações' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Verificar saúde' }).click();
+  await expect(page.getByText('Estado agregado: Degradado · Portal: Saudável')).toBeVisible();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .disableRules(['color-contrast'])
+    .analyze();
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 });

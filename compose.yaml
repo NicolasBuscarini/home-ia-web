@@ -25,19 +25,25 @@ services:
     volumes:
       - .:/workspace
       - ../home-ia-monitoring-web:/remote
+      - ../home-ia-module-activitywatch:/activitywatch-remote
+      - ../home-ia-platform-web:/platform-remote
       - ../home-ia-shared:/home-ia-shared
       - web_node_modules:/workspace/node_modules
       - monitoring_web_node_modules:/remote/node_modules
+      - activitywatch_remote_node_modules:/activitywatch-remote/node_modules
+      - platform_remote_node_modules:/platform-remote/node_modules
       - shared_node_modules:/home-ia-shared/node_modules
     environment:
       CI: "true"
       FEDERATION_BASE_URL: http://127.0.0.1:5183
       VITE_MONITORING_REMOTE_URL: http://127.0.0.1:5184/remoteEntry.js
+      VITE_ACTIVITYWATCH_REMOTE_URL: http://127.0.0.1:5185/remoteEntry.js
+      VITE_PLATFORM_REMOTE_URL: http://127.0.0.1:5186/remoteEntry.js
     tmpfs:
       - /tmp:size=512m,mode=1777
     security_opt:
       - no-new-privileges:true
-    command: sh -lc 'set -e; cd /home-ia-shared && npm ci --omit=peer && npm run build; cd /remote && npm ci && npm run build; cd /workspace && npm ci && VITE_MONITORING_REMOTE_URL=http://127.0.0.1:5184/remoteEntry.js npm run build; (cd /remote && npm run preview -- --port 5184 --strictPort >/tmp/remote.log 2>&1 &); (cd /workspace && npm run preview -- --port 5183 --strictPort >/tmp/shell.log 2>&1 &); node -e "const wait=async()=>{for(let i=0;i<60;i++){try{const [a,b]=await Promise.all([fetch(\"http://127.0.0.1:5183\"),fetch(\"http://127.0.0.1:5184/remoteEntry.js\")]);if(a.ok&&b.ok)return;}catch{} await new Promise(r=>setTimeout(r,1000));} throw new Error(\"preview timeout\")}; wait()"; npx playwright test --config=playwright.federation.config.ts'
+    command: sh -lc 'set -e; cd /home-ia-shared && npm ci --omit=peer && npm run build; cd /remote && npm ci && npm run build; cd /activitywatch-remote && npm ci && npm run build; cd /platform-remote && npm ci && npm run build; cd /workspace && npm ci && VITE_MONITORING_REMOTE_URL=http://127.0.0.1:5184/remoteEntry.js VITE_ACTIVITYWATCH_REMOTE_URL=http://127.0.0.1:5185/remoteEntry.js VITE_PLATFORM_REMOTE_URL=http://127.0.0.1:5186/remoteEntry.js npm run build; (cd /remote && npm run preview -- --port 5184 --strictPort >/tmp/remote.log 2>&1 &); (cd /activitywatch-remote && npm run preview -- --port 5185 --strictPort >/tmp/activitywatch-remote.log 2>&1 &); (cd /platform-remote && npm run preview -- --port 5186 --strictPort >/tmp/platform-remote.log 2>&1 &); (cd /workspace && npm run preview -- --port 5183 --strictPort >/tmp/shell.log 2>&1 &); node -e "const wait=async()=>{const urls=[\"http://127.0.0.1:5183\",\"http://127.0.0.1:5184/remoteEntry.js\",\"http://127.0.0.1:5185/remoteEntry.js\",\"http://127.0.0.1:5186/remoteEntry.js\"];for(let i=0;i<60;i++){try{const rs=await Promise.all(urls.map((u)=>fetch(u)));const ok=rs.every((r)=>r.ok);const js=rs.slice(1).every((r)=>(r.headers.get(\"content-type\")||\"\").includes(\"javascript\"));if(ok&&js)return;if(i>5&&ok&&!js){console.log(\"unexpected content types:\",rs.map((r)=>r.headers.get(\"content-type\")));}}catch{} await new Promise(r=>setTimeout(r,1000));} throw new Error(\"preview timeout\")}; wait()"; npx playwright test --config=playwright.federation.config.ts || { echo "--- shell log"; tail -40 /tmp/shell.log; echo "--- monitoring remote log"; tail -40 /tmp/remote.log; echo "--- activitywatch remote log"; tail -40 /tmp/activitywatch-remote.log; echo "--- platform remote log"; tail -40 /tmp/platform-remote.log; exit 1; }'
 
   ct02:
     image: mcr.microsoft.com/playwright:v1.56.1-noble
@@ -60,3 +66,5 @@ volumes:
   web_node_modules:
   shared_node_modules:
   monitoring_web_node_modules:
+  activitywatch_remote_node_modules:
+  platform_remote_node_modules:
