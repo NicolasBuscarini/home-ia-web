@@ -129,10 +129,10 @@ function AppContent() {
         if (isLocale(preferences.languageTag)) setLocale(preferences.languageTag);
       }
     } catch {
-      // The legacy dashboard remains usable if the portal projection is unavailable.
+      // The legacy dashboard remains usable if the portal projection is unavailable. Keep the
+      // requested module parameters so a deep link survives a portal outage window too.
       setPortalModuleIds(undefined);
       setPortalSubmodules(undefined);
-      setModuleParams({});
     }
   }, [setLocale]);
 
@@ -171,7 +171,6 @@ function AppContent() {
       setClientCount(undefined);
       setPortalModuleIds(undefined);
       setPortalSubmodules(undefined);
-      setModuleParams({});
       setScreen('anonymous');
       return;
     }
@@ -248,7 +247,6 @@ function AppContent() {
             setClientCount(undefined);
             setPortalModuleIds(undefined);
             setPortalSubmodules(undefined);
-            setModuleParams({});
           } else setError(t('app.error.offline'));
         }
       } finally {
@@ -356,6 +354,27 @@ function AppContent() {
   }, [activeModule, activityWatchAllowed, administrationAllowed, monitoringAllowed]);
 
   useEffect(() => {
+    if (screen !== 'authenticated') return;
+    const allowed =
+      activeModule === 'monitoring'
+        ? monitoringAllowed
+        : activeModule === 'activitywatch'
+          ? activityWatchAllowed
+          : activeModule === 'access' || activeModule === 'systems'
+            ? administrationAllowed
+            : false;
+    if (allowed) return;
+
+    // The requested link belongs to a module/profile the account cannot access. Drop its
+    // module-scoped parameters; the effect above then selects the first authorized area and the
+    // URL sync rewrites the address bar. Re-running after a later login also covers a different
+    // account without leaking parameters from the previous session.
+    setModuleParams({});
+    if (monitoringAllowed) setMonitoringView('monitor');
+    if (administrationAllowed) setAccessView('users');
+  }, [screen, activeModule, monitoringAllowed, activityWatchAllowed, administrationAllowed]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem('garage-watch.sidebar-collapsed.v1', String(sidebarCollapsed));
     } catch {
@@ -391,19 +410,15 @@ function AppContent() {
         { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
       ];
   useEffect(() => {
-    const search =
-      screen === 'authenticated'
-        ? serializeDeepLink({
-            module: activeModule,
-            view:
-              activeModule === 'monitoring'
-                ? monitoringView
-                : activeModule === 'access'
-                  ? accessView
-                  : undefined,
-            ...moduleParams,
-          })
-        : '';
+    // While anonymous, keep the requested deep link in the address bar so a login (or a reload on
+    // the login screen) can return to it after the server validates the session.
+    if (screen !== 'authenticated') return;
+    const search = serializeDeepLink({
+      module: activeModule,
+      view:
+        activeModule === 'monitoring' ? monitoringView : activeModule === 'access' ? accessView : undefined,
+      ...moduleParams,
+    });
     const next = `${window.location.pathname}${search}`;
     if (`${window.location.pathname}${window.location.search}` !== next) {
       window.history.replaceState(null, '', next);

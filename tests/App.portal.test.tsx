@@ -333,6 +333,78 @@ describe('portal shell integration', () => {
     });
   });
 
+  it('returns to the requested deep link after an anonymous login', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    window.history.replaceState(null, '', '/?module=monitoring&view=clips&clip=CLP000000000001');
+    let authenticated = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/auth/session') return json({ authenticated });
+      if (path === '/api/v1/auth/login') {
+        authenticated = true;
+        return new Response(null, { status: 204 });
+      }
+      if (path === '/api/v1/auth/me')
+        return json({ username: 'admin', role: 'Administrator', canMonitor: true });
+      if (path === '/api/v1/cameras') return json([camera]);
+      if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
+      if (path === '/api/v1/portal/navigation') return json(navigation(['monitoring', 'administration']));
+      if (path === '/api/v1/portal/preferences' && method === 'GET') return json(preferences());
+      throw new Error(`Unexpected request ${method} ${path}`);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    expect(window.location.search).toBe('?module=monitoring&view=clips&clip=CLP000000000001');
+
+    await user.type(screen.getByLabelText('Usuário'), 'admin');
+    await user.type(screen.getByLabelText('Senha'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    const monitoring = await screen.findByTestId('monitoring-module');
+    expect(monitoring).toHaveAttribute('data-active-view', 'clips');
+    expect(JSON.parse(monitoring.getAttribute('data-deep-link') ?? '{}')).toEqual({
+      clip: 'CLP000000000001',
+    });
+    await waitFor(() =>
+      expect(window.location.search).toBe('?module=monitoring&view=clips&clip=CLP000000000001'),
+    );
+  });
+
+  it('falls back when the linked module is not authorized for the profile', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    window.history.replaceState(null, '', '/?module=access&view=users');
+    let authenticated = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === '/api/v1/auth/session') return json({ authenticated });
+      if (path === '/api/v1/auth/login') {
+        authenticated = true;
+        return new Response(null, { status: 204 });
+      }
+      if (path === '/api/v1/auth/me') return json({ username: 'viewer', role: 'Viewer', canMonitor: true });
+      if (path === '/api/v1/cameras') return json([camera]);
+      if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
+      if (path === '/api/v1/portal/navigation') return json(navigation(['monitoring'], 'Viewer'));
+      if (path === '/api/v1/portal/preferences') return json(preferences());
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    await user.type(screen.getByLabelText('Usuário'), 'viewer');
+    await user.type(screen.getByLabelText('Senha'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    const monitoring = await screen.findByTestId('monitoring-module');
+    expect(monitoring).toHaveAttribute('data-active-view', 'monitor');
+    expect(screen.queryByRole('button', { name: /Access|Acessos/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe('?module=monitoring&view=monitor'));
+  });
+
   it('keeps the browser URL in sync with the selected module and view', async () => {
     localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
     installFetch({ modules: ['monitoring', 'administration'] });
