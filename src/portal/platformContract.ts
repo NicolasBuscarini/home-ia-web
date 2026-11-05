@@ -13,3 +13,9 @@ export interface SystemsModuleProps {
   userRole: UserRole;
   portalModuleIds?: string[];
 }
+
+export interface AuditModuleProps {
+  locale: string;
+  userRole: UserRole;
+  portalModuleIds?: string[];
+}

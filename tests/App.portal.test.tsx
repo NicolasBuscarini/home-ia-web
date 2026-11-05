@@ -94,6 +94,7 @@ function installFetch(
     failNavigation?: boolean;
     portalPreferences?: ReturnType<typeof preferences>;
     writes?: Array<Record<string, unknown>>;
+    events?: Array<Record<string, unknown>>;
   } = {},
 ) {
   const {
@@ -120,6 +121,10 @@ function installFetch(
       const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       writes.push(body);
       return json(preferences({ ...body, isDefault: false, updatedAtUtc: '2026-11-02T12:01:00Z' }));
+    }
+    if (path === '/api/v1/events') {
+      options.events?.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      return json({ publicId: 'EVT000000000001' }, 201);
     }
     throw new Error(`Unexpected request ${method} ${path}`);
   });
@@ -165,6 +170,32 @@ describe('portal shell integration', () => {
       'data-module-ids',
       'monitoring,administration',
     );
+  });
+
+  it('emits navigation events for the landing area and for module changes', async () => {
+    const events: Array<Record<string, unknown>> = [];
+    installFetch({ events });
+    render(<App />);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(events).toHaveLength(1));
+    expect(events[0]).toMatchObject({
+      eventType: 'navigation.viewed',
+      category: 'navigation',
+      source: 'shell',
+      emitter: 'browser',
+      resource: { type: 'portal.module', publicId: 'monitoring.monitor' },
+    });
+
+    const nav = await screen.findByRole('navigation');
+    await user.click(within(nav).getByRole('button', { name: /Systems|Sistemas/ }));
+
+    await waitFor(() => expect(events).toHaveLength(2));
+    expect(events[1]).toMatchObject({
+      eventType: 'navigation.viewed',
+      resource: { type: 'portal.module', publicId: 'systems' },
+    });
+    expect(events[1]?.correlationId).not.toBe(events[0]?.correlationId);
   });
 
   it('navigates user-facing sections as sidebar submodules and closes the mobile drawer on selection', async () => {
@@ -227,6 +258,65 @@ describe('portal shell integration', () => {
     expect(within(subnav).getByRole('button', { name: 'Clipes' })).toBeInTheDocument();
     expect(within(subnav).queryByRole('button', { name: 'Pessoas' })).not.toBeInTheDocument();
     expect(within(subnav).queryByRole('button', { name: 'Regras de clipe' })).not.toBeInTheDocument();
+  });
+
+  it('opens the audit area only when the portal projects the audit submodule', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({
+      modules: ['monitoring', 'administration'],
+      items: {
+        administration: [
+          { itemId: 'users', labelKey: 'dashboard.menu.users', sortOrder: 10 },
+          { itemId: 'profiles', labelKey: 'dashboard.menu.profiles', sortOrder: 20 },
+          { itemId: 'requests', labelKey: 'dashboard.menu.accessRequests', sortOrder: 30 },
+          { itemId: 'audit', labelKey: 'dashboard.menu.audit', sortOrder: 40 },
+        ],
+      },
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    await user.click(within(nav).getByRole('button', { name: 'Auditoria' }));
+    expect(await screen.findByTestId('audit-module')).toHaveAttribute(
+      'data-module-ids',
+      'monitoring,administration',
+    );
+
+    await user.click(within(nav).getByRole('button', { name: 'Acessos' }));
+    const accessNav = within(nav).getByRole('list', { name: 'Submódulos de Acessos' });
+    expect(within(accessNav).queryByRole('button', { name: 'Auditoria' })).not.toBeInTheDocument();
+    expect(within(accessNav).getAllByRole('button')).toHaveLength(3);
+
+    cleanup();
+    vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
+    installFetch({ modules: ['monitoring', 'administration'] });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Módulos da plataforma' })).queryByRole('button', {
+        name: 'Auditoria',
+      }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
+    installFetch({
+      modules: ['monitoring', 'administration'],
+      role: 'Viewer',
+      items: {
+        administration: [{ itemId: 'audit', labelKey: 'dashboard.menu.audit', sortOrder: 40 }],
+      },
+    });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+    const viewerNav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    expect(within(viewerNav).getByRole('button', { name: 'Auditoria' })).toBeInTheDocument();
+    expect(within(viewerNav).queryByRole('button', { name: 'Acessos' })).not.toBeInTheDocument();
+    expect(within(viewerNav).queryByRole('button', { name: 'Sistemas' })).not.toBeInTheDocument();
   });
 
   it('renders submodules projected by the portal catalog instead of local defaults', async () => {

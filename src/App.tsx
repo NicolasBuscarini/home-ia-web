@@ -23,16 +23,18 @@ import { AppHeader } from './components/AppHeader';
 import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
 import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
+import { shellEvents } from './portal/platformEvents';
 import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
 import { getOrCreateClientId } from './services/clientIdentity';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type ModuleView = 'monitoring' | 'activitywatch' | 'access' | 'systems';
+type ModuleView = 'monitoring' | 'activitywatch' | 'access' | 'systems' | 'audit';
 
 const RemoteMonitoringModule = lazy(() => import('monitoring/MonitoringModule'));
 const RemoteActivityWatchModule = lazy(() => import('activitywatch/ActivityWatchModule'));
 const RemoteAccessModule = lazy(() => import('platform/AccessModule'));
 const RemoteSystemsModule = lazy(() => import('platform/SystemsModule'));
+const RemoteAuditModule = lazy(() => import('platform/AuditModule'));
 
 function ModuleLoading() {
   const { t } = useI18n();
@@ -70,7 +72,8 @@ function AppContent() {
     return requested === 'monitoring' ||
       requested === 'activitywatch' ||
       requested === 'access' ||
-      requested === 'systems'
+      requested === 'systems' ||
+      requested === 'audit'
       ? requested
       : 'monitoring';
   });
@@ -342,16 +345,26 @@ function AppContent() {
     isAdministrator && (!portalModuleIds || portalModuleIds.includes('activitywatch'));
   const administrationAllowed =
     isAdministrator && (!portalModuleIds || portalModuleIds.includes('administration'));
+  // The portal projects submodules after permission filtering; `audit` therefore only exists in the
+  // navigation when the account holds `events.read`, even for a delegated non-Administrator profile.
+  // The local fallback keeps the area reachable for an Administrator while the projection is
+  // unavailable, and the server still enforces the permission on every query.
+  const auditAllowed =
+    (!portalModuleIds || portalModuleIds.includes('administration')) &&
+    (portalSubmodules
+      ? (portalSubmodules.administration ?? []).some((view) => view.id === 'audit')
+      : isAdministrator);
 
   useEffect(() => {
     const available: ModuleView[] = [];
     if (monitoringAllowed) available.push('monitoring');
     if (activityWatchAllowed) available.push('activitywatch');
     if (administrationAllowed) available.push('access', 'systems');
+    if (auditAllowed) available.push('audit');
     if (available.length > 0 && !available.includes(activeModule)) {
       setActiveModule(available[0] ?? 'monitoring');
     }
-  }, [activeModule, activityWatchAllowed, administrationAllowed, monitoringAllowed]);
+  }, [activeModule, activityWatchAllowed, administrationAllowed, auditAllowed, monitoringAllowed]);
 
   useEffect(() => {
     if (screen !== 'authenticated') return;
@@ -362,7 +375,9 @@ function AppContent() {
           ? activityWatchAllowed
           : activeModule === 'access' || activeModule === 'systems'
             ? administrationAllowed
-            : false;
+            : activeModule === 'audit'
+              ? auditAllowed
+              : false;
     if (allowed) return;
 
     // The requested link belongs to a module/profile the account cannot access. Drop its
@@ -372,7 +387,7 @@ function AppContent() {
     setModuleParams({});
     if (monitoringAllowed) setMonitoringView('monitor');
     if (administrationAllowed) setAccessView('users');
-  }, [screen, activeModule, monitoringAllowed, activityWatchAllowed, administrationAllowed]);
+  }, [screen, activeModule, monitoringAllowed, activityWatchAllowed, administrationAllowed, auditAllowed]);
 
   useEffect(() => {
     try {
@@ -403,7 +418,7 @@ function AppContent() {
           { id: 'clips', labelKey: 'dashboard.menu.clips' },
         ];
   const accessViews = portalSubmodules
-    ? (portalSubmodules.administration ?? [])
+    ? (portalSubmodules.administration ?? []).filter((view) => view.id !== 'audit')
     : [
         { id: 'users', labelKey: 'dashboard.menu.users' },
         { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
@@ -424,6 +439,23 @@ function AppContent() {
       window.history.replaceState(null, '', next);
     }
   }, [screen, activeModule, monitoringView, accessView, moduleParams]);
+
+  // Uma navegação real (módulo ou submódulo, incluindo o destino inicial de um deep link) gera um
+  // evento de melhor esforço. A chave evita duplicar o mesmo destino em re-renderizações e o
+  // evento não é fonte autoritativa: o portal deriva ator, sessão e rota.
+  const emittedNavigation = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (screen !== 'authenticated') {
+      emittedNavigation.current = undefined;
+      return;
+    }
+    const view =
+      activeModule === 'monitoring' ? monitoringView : activeModule === 'access' ? accessView : undefined;
+    const key = `${activeModule}:${view ?? ''}`;
+    if (emittedNavigation.current === key) return;
+    emittedNavigation.current = key;
+    shellEvents.navigationViewed({ module: activeModule, view });
+  }, [screen, activeModule, monitoringView, accessView]);
 
   const appliedLink = useRef(false);
   useEffect(() => {
@@ -471,6 +503,13 @@ function AppContent() {
       icon: '⚙',
       labelKey: 'shell.modules.systems',
       visible: administrationAllowed,
+      views: [],
+    },
+    {
+      id: 'audit',
+      icon: '▤',
+      labelKey: 'shell.modules.audit',
+      visible: auditAllowed,
       views: [],
     },
   ];
@@ -640,6 +679,13 @@ function AppContent() {
           <PortalModuleBoundary moduleId="systems">
             <Suspense fallback={<ModuleLoading />}>
               <RemoteSystemsModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+        {screen === 'authenticated' && role && activeModule === 'audit' && auditAllowed && (
+          <PortalModuleBoundary moduleId="audit">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteAuditModule locale={locale} userRole={role} portalModuleIds={portalModuleIds} />
             </Suspense>
           </PortalModuleBoundary>
         )}

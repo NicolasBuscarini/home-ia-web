@@ -29,3 +29,11 @@ declare module 'platform/SystemsModule' {
   const SystemsModule: ComponentType<SystemsModuleProps>;
   export default SystemsModule;
 }
+
+declare module 'platform/AuditModule' {
+  import type { ComponentType } from 'react';
+  import type { AuditModuleProps } from './portal/platformContract';
+
+  const AuditModule: ComponentType<AuditModuleProps>;
+  export default AuditModule;
+}
