@@ -6,6 +6,14 @@ declare module 'monitoring/MonitoringModule' {
   export default MonitoringModule;
 }
 
+declare module 'monitoring/BiometricsModule' {
+  import type { ComponentType } from 'react';
+  import type { BiometricsModuleProps } from './portal/biometricsContract';
+
+  const BiometricsModule: ComponentType<BiometricsModuleProps>;
+  export default BiometricsModule;
+}
+
 declare module 'platform/AccessModule' {
   import type { ComponentType } from 'react';
   import type { AccessModuleProps } from './portal/platformContract';

@@ -37,6 +37,15 @@ const monitoringAdminItems = [
   ['people', 'dashboard.menu.people'],
 ].map(([itemId, labelKey], index) => ({ itemId, labelKey, sortOrder: (index + 1) * 10 }));
 
+const biometricsItems = (
+  [
+    ['enrollments', 'dashboard.menu.biometricEnrollments'],
+    ['observations', 'dashboard.menu.biometricObservations'],
+    ['calibration', 'dashboard.menu.biometricCalibration'],
+    ['model', 'dashboard.menu.biometricModel'],
+  ] as const
+).map(([itemId, labelKey], index) => ({ itemId, labelKey, sortOrder: (index + 1) * 10 }));
+
 const administrationItems = [
   ['users', 'dashboard.menu.users'],
   ['profiles', 'dashboard.menu.profiles'],
@@ -388,6 +397,34 @@ describe('portal shell integration', () => {
     render(<App />);
     await screen.findByTestId('monitoring-module');
     expect(screen.queryByRole('button', { name: 'Atividade' })).not.toBeInTheDocument();
+  });
+
+  it('opens the Biometrics module and its projected submodules', async () => {
+    localStorage.setItem('garage-watch.locale.v1', 'pt-BR');
+    installFetch({
+      modules: ['monitoring', 'biometrics'],
+      items: { biometrics: biometricsItems },
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByTestId('monitoring-module');
+
+    const nav = screen.getByRole('navigation', { name: 'Módulos da plataforma' });
+    await user.click(within(nav).getByRole('button', { name: 'Biometria' }));
+    expect(await screen.findByRole('region', { name: 'Biometria' })).toHaveTextContent('enrollments');
+    expect(within(nav).getByRole('button', { name: 'Calibração' })).toBeInTheDocument();
+
+    await user.click(within(nav).getByRole('button', { name: 'Calibração' }));
+    expect(await screen.findByRole('region', { name: 'Biometria' })).toHaveTextContent('calibration');
+    expect(window.location.search).toContain('module=biometrics');
+    expect(window.location.search).toContain('view=calibration');
+
+    cleanup();
+    vi.restoreAllMocks();
+    installFetch({ modules: ['monitoring'] });
+    render(<App />);
+    await screen.findByTestId('monitoring-module');
+    expect(screen.queryByRole('button', { name: 'Biometria' })).not.toBeInTheDocument();
   });
 
   it('persists theme and language changes through the portal API', async () => {

@@ -28,9 +28,10 @@ import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from
 import { getOrCreateClientId } from './services/clientIdentity';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type ModuleView = 'monitoring' | 'activitywatch' | 'access' | 'systems' | 'audit';
+type ModuleView = 'monitoring' | 'activitywatch' | 'biometrics' | 'access' | 'systems' | 'audit';
 
 const RemoteMonitoringModule = lazy(() => import('monitoring/MonitoringModule'));
+const RemoteBiometricsModule = lazy(() => import('monitoring/BiometricsModule'));
 const RemoteActivityWatchModule = lazy(() => import('activitywatch/ActivityWatchModule'));
 const RemoteAccessModule = lazy(() => import('platform/AccessModule'));
 const RemoteSystemsModule = lazy(() => import('platform/SystemsModule'));
@@ -71,6 +72,7 @@ function AppContent() {
     const requested = initialLink.module;
     return requested === 'monitoring' ||
       requested === 'activitywatch' ||
+      requested === 'biometrics' ||
       requested === 'access' ||
       requested === 'systems' ||
       requested === 'audit'
@@ -78,6 +80,7 @@ function AppContent() {
       : 'monitoring';
   });
   const [monitoringView, setMonitoringView] = useState(() => initialLink.view ?? 'monitor');
+  const [biometricsView, setBiometricsView] = useState(() => initialLink.view ?? 'enrollments');
   const [moduleParams, setModuleParams] = useState<Record<string, string>>(() =>
     moduleDeepLinkParams(initialLink),
   );
@@ -345,6 +348,12 @@ function AppContent() {
     isAdministrator && (!portalModuleIds || portalModuleIds.includes('activitywatch'));
   const administrationAllowed =
     isAdministrator && (!portalModuleIds || portalModuleIds.includes('administration'));
+  // Biometrics is a top-level area projected by the portal. The fallback keeps it reachable for
+  // an Administrator while the projection is unavailable; the API still enforces
+  // `biometrics.manage` on every request.
+  const biometricsAllowed =
+    (!portalModuleIds || portalModuleIds.includes('biometrics')) &&
+    (portalModuleIds ? true : isAdministrator);
   // The portal projects submodules after permission filtering; `audit` therefore only exists in the
   // navigation when the account holds `events.read`, even for a delegated non-Administrator profile.
   // The local fallback keeps the area reachable for an Administrator while the projection is
@@ -354,17 +363,26 @@ function AppContent() {
     (portalSubmodules
       ? (portalSubmodules.administration ?? []).some((view) => view.id === 'audit')
       : isAdministrator);
+  const hasModules = monitoringAllowed || activityWatchAllowed || biometricsAllowed || administrationAllowed;
 
   useEffect(() => {
     const available: ModuleView[] = [];
     if (monitoringAllowed) available.push('monitoring');
     if (activityWatchAllowed) available.push('activitywatch');
+    if (biometricsAllowed) available.push('biometrics');
     if (administrationAllowed) available.push('access', 'systems');
     if (auditAllowed) available.push('audit');
     if (available.length > 0 && !available.includes(activeModule)) {
       setActiveModule(available[0] ?? 'monitoring');
     }
-  }, [activeModule, activityWatchAllowed, administrationAllowed, auditAllowed, monitoringAllowed]);
+  }, [
+    activeModule,
+    activityWatchAllowed,
+    administrationAllowed,
+    auditAllowed,
+    biometricsAllowed,
+    monitoringAllowed,
+  ]);
 
   useEffect(() => {
     if (screen !== 'authenticated') return;
@@ -373,11 +391,13 @@ function AppContent() {
         ? monitoringAllowed
         : activeModule === 'activitywatch'
           ? activityWatchAllowed
-          : activeModule === 'access' || activeModule === 'systems'
-            ? administrationAllowed
-            : activeModule === 'audit'
-              ? auditAllowed
-              : false;
+          : activeModule === 'biometrics'
+            ? biometricsAllowed
+            : activeModule === 'access' || activeModule === 'systems'
+              ? administrationAllowed
+              : activeModule === 'audit'
+                ? auditAllowed
+                : false;
     if (allowed) return;
 
     // The requested link belongs to a module/profile the account cannot access. Drop its
@@ -387,7 +407,15 @@ function AppContent() {
     setModuleParams({});
     if (monitoringAllowed) setMonitoringView('monitor');
     if (administrationAllowed) setAccessView('users');
-  }, [screen, activeModule, monitoringAllowed, activityWatchAllowed, administrationAllowed, auditAllowed]);
+  }, [
+    screen,
+    activeModule,
+    monitoringAllowed,
+    activityWatchAllowed,
+    administrationAllowed,
+    auditAllowed,
+    biometricsAllowed,
+  ]);
 
   useEffect(() => {
     try {
@@ -424,6 +452,14 @@ function AppContent() {
         { id: 'profiles', labelKey: 'dashboard.menu.profiles' },
         { id: 'requests', labelKey: 'dashboard.menu.accessRequests' },
       ];
+  const biometricsViews = portalSubmodules
+    ? (portalSubmodules.biometrics ?? [])
+    : [
+        { id: 'enrollments', labelKey: 'dashboard.menu.biometricEnrollments' },
+        { id: 'observations', labelKey: 'dashboard.menu.biometricObservations' },
+        { id: 'calibration', labelKey: 'dashboard.menu.biometricCalibration' },
+        { id: 'model', labelKey: 'dashboard.menu.biometricModel' },
+      ];
   useEffect(() => {
     // While anonymous, keep the requested deep link in the address bar so a login (or a reload on
     // the login screen) can return to it after the server validates the session.
@@ -431,14 +467,20 @@ function AppContent() {
     const search = serializeDeepLink({
       module: activeModule,
       view:
-        activeModule === 'monitoring' ? monitoringView : activeModule === 'access' ? accessView : undefined,
+        activeModule === 'monitoring'
+          ? monitoringView
+          : activeModule === 'biometrics'
+            ? biometricsView
+            : activeModule === 'access'
+              ? accessView
+              : undefined,
       ...moduleParams,
     });
     const next = `${window.location.pathname}${search}`;
     if (`${window.location.pathname}${window.location.search}` !== next) {
       window.history.replaceState(null, '', next);
     }
-  }, [screen, activeModule, monitoringView, accessView, moduleParams]);
+  }, [screen, activeModule, monitoringView, biometricsView, accessView, moduleParams]);
 
   // Uma navegação real (módulo ou submódulo, incluindo o destino inicial de um deep link) gera um
   // evento de melhor esforço. A chave evita duplicar o mesmo destino em re-renderizações e o
@@ -450,25 +492,53 @@ function AppContent() {
       return;
     }
     const view =
-      activeModule === 'monitoring' ? monitoringView : activeModule === 'access' ? accessView : undefined;
+      activeModule === 'monitoring'
+        ? monitoringView
+        : activeModule === 'biometrics'
+          ? biometricsView
+          : activeModule === 'access'
+            ? accessView
+            : undefined;
     const key = `${activeModule}:${view ?? ''}`;
     if (emittedNavigation.current === key) return;
     emittedNavigation.current = key;
     shellEvents.navigationViewed({ module: activeModule, view });
-  }, [screen, activeModule, monitoringView, accessView]);
+  }, [screen, activeModule, monitoringView, biometricsView, accessView]);
 
   const appliedLink = useRef(false);
   useEffect(() => {
     if (appliedLink.current || !portalSubmodules || screen !== 'authenticated') return;
     appliedLink.current = true;
     const views =
-      activeModule === 'monitoring' ? monitoringViews : activeModule === 'access' ? accessViews : [];
+      activeModule === 'monitoring'
+        ? monitoringViews
+        : activeModule === 'biometrics'
+          ? biometricsViews
+          : activeModule === 'access'
+            ? accessViews
+            : [];
     if (views.length === 0) return;
-    const current = activeModule === 'monitoring' ? monitoringView : accessView;
+    const current =
+      activeModule === 'monitoring'
+        ? monitoringView
+        : activeModule === 'biometrics'
+          ? biometricsView
+          : accessView;
     if (views.some((view) => view.id === current)) return;
     if (activeModule === 'monitoring') setMonitoringView(views[0]?.id ?? 'monitor');
+    if (activeModule === 'biometrics') setBiometricsView(views[0]?.id ?? 'enrollments');
     if (activeModule === 'access') setAccessView(views[0]?.id ?? 'users');
-  }, [screen, portalSubmodules, activeModule, monitoringViews, accessViews, monitoringView, accessView]);
+  }, [
+    screen,
+    portalSubmodules,
+    activeModule,
+    monitoringViews,
+    biometricsViews,
+    accessViews,
+    monitoringView,
+    biometricsView,
+    accessView,
+  ]);
 
   const moduleItems: Array<{
     id: ModuleView;
@@ -490,6 +560,13 @@ function AppContent() {
       labelKey: 'shell.modules.activitywatch',
       visible: activityWatchAllowed,
       views: [],
+    },
+    {
+      id: 'biometrics',
+      icon: '☺',
+      labelKey: 'shell.modules.biometrics',
+      visible: biometricsAllowed,
+      views: biometricsViews.map((view) => ({ id: view.id, labelKey: view.labelKey as TranslationKey })),
     },
     {
       id: 'access',
@@ -518,6 +595,7 @@ function AppContent() {
     setActiveModule(module);
     setModuleParams({});
     if (module === 'monitoring') setMonitoringView('monitor');
+    if (module === 'biometrics') setBiometricsView('enrollments');
     if (module === 'access') setAccessView('users');
     setMobileNavOpen(false);
   }
@@ -526,6 +604,7 @@ function AppContent() {
     setActiveModule(module);
     setModuleParams({});
     if (module === 'monitoring') setMonitoringView(view);
+    if (module === 'biometrics') setBiometricsView(view);
     if (module === 'access') setAccessView(view);
     setMobileNavOpen(false);
   }
@@ -550,93 +629,93 @@ function AppContent() {
         </section>
       )}
       {screen === 'anonymous' && <AuthenticationPanel onAuthenticated={handleAuthenticated} />}
-      {screen === 'authenticated' && role && !canMonitor && (
+      {screen === 'authenticated' && role && !canMonitor && !hasModules && (
         <UserLanding canRequestAccess={role === 'User'} />
       )}
-      {screen === 'authenticated' &&
-        role &&
-        (monitoringAllowed || activityWatchAllowed || administrationAllowed) && (
-          <>
+      {screen === 'authenticated' && role && hasModules && (
+        <>
+          <button
+            className="module-menu-button"
+            type="button"
+            aria-expanded={mobileNavOpen}
+            aria-controls="module-navigation"
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">☰</span> {t('shell.modules.label')}
+          </button>
+          <nav
+            id="module-navigation"
+            className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
+            aria-label={t('shell.modules.label')}
+          >
             <button
-              className="module-menu-button"
+              className="module-nav-toggle"
               type="button"
-              aria-expanded={mobileNavOpen}
-              aria-controls="module-navigation"
-              onClick={() => setMobileNavOpen((open) => !open)}
+              aria-pressed={sidebarCollapsed}
+              aria-label={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+              title={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
             >
-              <span aria-hidden="true">☰</span> {t('shell.modules.label')}
+              <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
             </button>
-            <nav
-              id="module-navigation"
-              className={`module-nav${mobileNavOpen ? ' is-open' : ''}`}
-              aria-label={t('shell.modules.label')}
-            >
-              <button
-                className="module-nav-toggle"
-                type="button"
-                aria-pressed={sidebarCollapsed}
-                aria-label={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
-                title={t(sidebarCollapsed ? 'shell.modules.expand' : 'shell.modules.collapse')}
-                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              >
-                <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
-              </button>
-              <ul className="nav nav-pills">
-                {moduleItems
-                  .filter((item) => item.visible)
-                  .map((item) => {
-                    const isActive = activeModule === item.id;
-                    const activeView =
-                      item.id === 'monitoring'
-                        ? monitoringView
+            <ul className="nav nav-pills">
+              {moduleItems
+                .filter((item) => item.visible)
+                .map((item) => {
+                  const isActive = activeModule === item.id;
+                  const activeView =
+                    item.id === 'monitoring'
+                      ? monitoringView
+                      : item.id === 'biometrics'
+                        ? biometricsView
                         : item.id === 'access'
                           ? accessView
                           : undefined;
-                    return (
-                      <li
-                        className={`nav-item${item.views.length > 0 ? ' module-nav-group' : ''}`}
-                        key={item.id}
+                  return (
+                    <li
+                      className={`nav-item${item.views.length > 0 ? ' module-nav-group' : ''}`}
+                      key={item.id}
+                    >
+                      <button
+                        className={`nav-link ${isActive ? 'active' : ''}`}
+                        type="button"
+                        aria-label={t(item.labelKey)}
+                        title={t(item.labelKey)}
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => selectModule(item.id)}
                       >
-                        <button
-                          className={`nav-link ${isActive ? 'active' : ''}`}
-                          type="button"
-                          aria-label={t(item.labelKey)}
-                          title={t(item.labelKey)}
-                          aria-current={isActive ? 'page' : undefined}
-                          onClick={() => selectModule(item.id)}
+                        <span className="module-nav-icon" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        <span className="module-nav-label">{t(item.labelKey)}</span>
+                      </button>
+                      {isActive && item.views.length > 0 && (
+                        <ul
+                          className="nav module-subnav"
+                          aria-label={t('shell.modules.submodules', { module: t(item.labelKey) })}
                         >
-                          <span className="module-nav-icon" aria-hidden="true">
-                            {item.icon}
-                          </span>
-                          <span className="module-nav-label">{t(item.labelKey)}</span>
-                        </button>
-                        {isActive && item.views.length > 0 && (
-                          <ul
-                            className="nav module-subnav"
-                            aria-label={t('shell.modules.submodules', { module: t(item.labelKey) })}
-                          >
-                            {item.views.map((view) => (
-                              <li className="nav-item" key={view.id}>
-                                <button
-                                  className={`nav-link ${activeView === view.id ? 'active' : ''}`}
-                                  type="button"
-                                  id={`module-subnav-${item.id}-${view.id}`}
-                                  aria-current={activeView === view.id ? 'page' : undefined}
-                                  onClick={() => selectSubmodule(item.id, view.id)}
-                                >
-                                  {t(view.labelKey)}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-              </ul>
-            </nav>
-          </>
-        )}
+                          {item.views.map((view) => (
+                            <li className="nav-item" key={view.id}>
+                              <button
+                                className={`nav-link ${activeView === view.id ? 'active' : ''}`}
+                                type="button"
+                                id={`module-subnav-${item.id}-${view.id}`}
+                                aria-current={activeView === view.id ? 'page' : undefined}
+                                onClick={() => selectSubmodule(item.id, view.id)}
+                              >
+                                {t(view.labelKey)}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+          </nav>
+        </>
+      )}
       <div className="app-content">
         {screen === 'authenticated' && role && activeModule === 'monitoring' && monitoringAllowed && (
           <PortalModuleBoundary moduleId="monitoring">
@@ -651,6 +730,18 @@ function AppContent() {
                 activeView={monitoringView}
                 deepLinkParams={moduleParams}
                 onDeepLinkParamsChange={setModuleParams}
+              />
+            </Suspense>
+          </PortalModuleBoundary>
+        )}
+        {screen === 'authenticated' && role && activeModule === 'biometrics' && biometricsAllowed && (
+          <PortalModuleBoundary moduleId="biometrics">
+            <Suspense fallback={<ModuleLoading />}>
+              <RemoteBiometricsModule
+                locale={locale}
+                userRole={role}
+                portalModuleIds={portalModuleIds}
+                activeView={biometricsView}
               />
             </Suspense>
           </PortalModuleBoundary>

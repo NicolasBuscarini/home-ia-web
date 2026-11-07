@@ -105,3 +105,55 @@ for (const profile of [
     }
   });
 }
+
+test('CT33 assisted panel inspection at desktop, mobile and 200% zoom', async ({
+  browser,
+  baseURL,
+}, testInfo) => {
+  test.skip(!username || !password, 'CT33 credentials are required; values are never logged.');
+  if (!baseURL) throw new Error('CT33_BASE_URL is required.');
+  const loginName = username ?? '';
+  const loginPassword = password ?? '';
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(baseURL);
+    await page.getByLabel('Usuário').fill(loginName);
+    await page.getByLabel('Senha', { exact: true }).fill(loginPassword);
+    await page.getByRole('button', { name: 'Entrar' }).click();
+    await expect(page.getByLabel('Vídeo ao vivo da câmera')).toBeVisible({ timeout: 60_000 });
+
+    for (const viewport of [
+      { width: 1366, height: 768, name: 'desktop-1366x768' },
+      { width: 360, height: 800, name: 'mobile-360x800' },
+      { width: 683, height: 384, name: 'zoom-200-equivalent' },
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto(baseURL);
+      await expect(page.getByLabel('Vídeo ao vivo da câmera')).toBeVisible({ timeout: 60_000 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${viewport.name} must not scroll horizontally`).toBeLessThanOrEqual(1);
+
+      const control = page.locator('button:visible').first();
+      await control.focus();
+      const focusState = await control.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          focusVisible: element.matches(':focus-visible'),
+          indicator: style.outlineStyle !== 'none' || style.boxShadow !== 'none',
+        };
+      });
+      expect(focusState.focusVisible, `${viewport.name} keyboard focus must be visible`).toBe(true);
+      expect(focusState.indicator, `${viewport.name} must expose a focus indicator`).toBe(true);
+
+      await page.screenshot({
+        path: testInfo.outputPath(`ct33-${viewport.name}.png`),
+        fullPage: true,
+      });
+    }
+  } finally {
+    await context.close();
+  }
+});
