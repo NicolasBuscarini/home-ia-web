@@ -104,6 +104,11 @@ function installFetch(
     portalPreferences?: ReturnType<typeof preferences>;
     writes?: Array<Record<string, unknown>>;
     events?: Array<Record<string, unknown>>;
+    failPreferences?: boolean;
+    preferenceWrite?: (body: Record<string, unknown>) => Promise<Response>;
+    expireFirstPoll?: boolean;
+    rejectCameraPoll?: boolean;
+    meResponse?: () => Promise<Response>;
   } = {},
 ) {
   const {
@@ -112,23 +117,31 @@ function installFetch(
     role = 'Administrator',
     writes = [],
   } = options;
+  let sessions = 0;
+  let cameraReads = 0;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const path = String(input);
     const method = init?.method ?? 'GET';
-    if (path === '/api/v1/auth/session') return json({ authenticated });
+    if (path === '/api/v1/auth/session')
+      return json({ authenticated: authenticated && !(options.expireFirstPoll && ++sessions === 2) });
     if (path === '/api/v1/auth/login') return new Response(null, { status: 204 });
-    if (path === '/api/v1/auth/me') return json({ username: 'admin', role, canMonitor: true });
-    if (path === '/api/v1/cameras') return json([camera]);
+    if (path === '/api/v1/auth/me')
+      return options.meResponse ? options.meResponse() : json({ username: 'admin', role, canMonitor: true });
+    if (path === '/api/v1/cameras')
+      return options.rejectCameraPoll && ++cameraReads === 2 ? json({}, 401) : json([camera]);
     if (path === '/api/v1/clients/presence') return json({ activeClients: 1 });
     if (path === '/api/v1/portal/navigation') {
       if (options.failNavigation) return json({ error: 'unavailable' }, 503);
       return json(navigation(modules, role, options.items ?? {}));
     }
     if (path === '/api/v1/portal/preferences' && method === 'GET')
-      return json(options.portalPreferences ?? preferences());
+      return options.failPreferences
+        ? json({ error: 'unavailable' }, 503)
+        : json(options.portalPreferences ?? preferences());
     if (path === '/api/v1/portal/preferences' && method === 'PUT') {
       const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       writes.push(body);
+      if (options.preferenceWrite) return options.preferenceWrite(body);
       return json(preferences({ ...body, isDefault: false, updatedAtUtc: '2026-11-02T12:01:00Z' }));
     }
     if (path === '/api/v1/events') {
@@ -153,7 +166,7 @@ describe('portal shell integration', () => {
     });
     render(<App />);
     await screen.findByText('admin', { selector: '.user-identity-name' });
-    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-bs-theme', 'light'));
     expect(screen.getByRole('combobox', { name: /Language|Idioma/ })).toHaveValue('en-US');
 
     const module = await screen.findByTestId('monitoring-module');
@@ -437,15 +450,181 @@ describe('portal shell integration', () => {
     const module = await screen.findByTestId('monitoring-module');
     expect(module).toHaveAttribute('data-module-ids', 'monitoring,administration');
 
-    await user.click(screen.getByText(/Bosque|Forest/, { selector: 'strong' }));
-    await user.click(screen.getByRole('button', { name: /Use Claro theme|Usar o tema Claro/ }));
-    await waitFor(() => expect(writes.some((body) => body.themeId === 'light')).toBe(true));
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#123abc{Enter}');
+    await user.click(screen.getByRole('switch', { name: /Modo escuro|Dark mode/ }));
+    await user.click(screen.getByRole('button', { name: 'Claymorphism' }));
+    await waitFor(() =>
+      expect(writes.at(-1)?.appearance).toEqual({
+        primary: '#123abc',
+        mode: 'light',
+        style: 'claymorphism',
+      }),
+    );
 
     fireEvent.change(document.getElementById('language-select') as HTMLSelectElement, {
       target: { value: 'en-US' },
     });
     await waitFor(() => expect(writes.some((body) => body.languageTag === 'en-US')).toBe(true));
+
+    const saved = writes.at(-1);
+    cleanup();
+    vi.restoreAllMocks();
+    localStorage.clear(); // A new browser/device has no local appearance cache.
+    const restoredWrites = installFetch({ portalPreferences: preferences({ ...saved, isDefault: false }) });
+    render(<App />);
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    expect(document.documentElement).toHaveAttribute('data-bs-theme', 'light');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'claymorphism');
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}')).toEqual({
+      primary: '#123abc',
+      mode: 'light',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(restoredWrites).toHaveLength(0);
   });
+
+  it('hydrates account defaults instead of uploading another account cache even if navigation fails', async () => {
+    localStorage.setItem('garage-watch.color.v1', JSON.stringify({ primary: '#ff0000', mode: 'light' }));
+    localStorage.setItem('garage-watch.theme-style.v1', 'retro-pixel');
+    const writes = installFetch({
+      failNavigation: true,
+      portalPreferences: preferences({
+        appearance: { primary: '#8ce0b4', mode: 'dark', style: 'classic' },
+      }),
+    });
+    render(<App />);
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'classic');
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}')).toEqual({
+      primary: '#8ce0b4',
+      mode: 'dark',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(writes).toHaveLength(0);
+  });
+
+  it('serializes in-flight changes and keeps only the latest appearance snapshot', async () => {
+    let release = () => {};
+    const first = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let count = 0;
+    const writes = installFetch({
+      preferenceWrite: async (body) => {
+        if (++count === 1) await first;
+        return json(preferences(body));
+      },
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#123456{Enter}');
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await user.clear(hex);
+    await user.type(hex, '#abcdef{Enter}');
+    await user.click(screen.getByRole('switch', { name: 'Modo escuro' }));
+    await user.click(screen.getByRole('button', { name: 'Neo Brutalism' }));
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(writes).toHaveLength(1);
+    release();
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]?.appearance).toEqual({ primary: '#abcdef', mode: 'light', style: 'neo-brutalism' });
+  });
+
+  it('keeps a failed save visible and retries the current custom appearance', async () => {
+    let unavailable = true;
+    const writes = installFetch({
+      preferenceWrite: async (body) => json(preferences(body), unavailable ? 503 : 200),
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#abcdef{Enter}');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}').primary).toBe('#abcdef');
+    unavailable = false;
+    await user.click(screen.getByRole('button', { name: /Tentar novamente|Try again/ }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(writes).toHaveLength(2);
+    expect(writes[1]?.appearance).toEqual({ primary: '#abcdef', mode: 'dark', style: 'classic' });
+  });
+
+  it('does not treat an older API ignoring appearance as a confirmed save', async () => {
+    installFetch({ preferenceWrite: async () => json(preferences()) });
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#abcdef{Enter}');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('does not save before a failed hydration is explicitly retried', async () => {
+    const options = { failPreferences: true };
+    const writes = installFetch(options);
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByText('admin', { selector: '.user-identity-name' });
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#123456{Enter}');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(writes).toHaveLength(0);
+    options.failPreferences = false;
+    await user.click(screen.getByRole('button', { name: /Tentar novamente|Try again/ }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}').primary).toBe('#8ce0b4');
+  });
+
+  it.each(['session', 'camera'])(
+    'clears account sync when %s detects expiry before a delayed login',
+    async (source) => {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let meReads = 0;
+      const writes = installFetch({
+        expireFirstPoll: source === 'session',
+        rejectCameraPoll: source === 'camera',
+        meResponse: async () => {
+          if (++meReads === 2) await gate;
+          return json({
+            username: meReads === 1 ? 'admin' : 'second-account',
+            role: 'Administrator',
+            canMonitor: true,
+          });
+        },
+      });
+      render(<App />);
+      const user = userEvent.setup();
+      await screen.findByRole('heading', { name: 'Entre no painel' });
+      await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+      const hex = screen.getByRole('textbox', { name: 'Hex' });
+      await user.clear(hex);
+      await user.type(hex, '#abcdef{Enter}');
+      await user.type(screen.getByLabelText('Usuário'), 'second-account');
+      await user.type(screen.getByLabelText('Senha'), '123456');
+      await user.click(screen.getByRole('button', { name: 'Entrar' }));
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      expect(writes).toHaveLength(0);
+      release();
+      await screen.findByText('second-account', { selector: '.user-identity-name' });
+      expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}').primary).toBe('#8ce0b4');
+    },
+  );
 
   it('opens a module, view and module-specific selection from the URL', async () => {
     localStorage.setItem('garage-watch.locale.v1', 'pt-BR');

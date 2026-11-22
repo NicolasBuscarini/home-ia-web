@@ -25,6 +25,10 @@ O shell emite eventos de navegação do EventStore (`T17-G`): ao entrar em uma �
 
 ## Desenvolvimento
 
+Se a API pública de `home-ia-shared` mudar, compile o pacote com `./home-ia verify-home-shared` e execute `./home-ia restart-web` na raiz de contexto. O plugin de federação guarda a lista de exports em memória: HMR comum não basta para renovar essa lista e pode causar `doesn't provide an export named` antes de montar o shell. O reinício afeta somente os Vites ativos, não API/captura. Recarregue a página depois.
+
+O ensaio da matriz em `./home-ia test-federation-web` exercita tanto o bundle de preview quanto um Vite isolado em 5193: arraste/cancelamento/limites, teclado, switch, reload, toque em viewport de 320 px e axe no menu aberto nos dois modos. Não usa câmera ou sessão reais; toque emulado não homologa um aparelho físico.
+
 Clone `home-ia-portal` com seus submódulos (`git clone --recurse-submodules ...`). Para desenvolver com HMR e API real, inicie o profile `web-dev` documentado no runbook da plataforma. O proxy do Vite encaminha `/api/*` e `/health/*` ao host API sem mudar o Host do navegador; o browser continua usando uma única origem local e o cookie HttpOnly.
 
 Verificações isoladas deste repositório, via Compose:
@@ -39,7 +43,7 @@ O comando instala somente conforme `package-lock.json`, verifica lint/formataç�
 
 `home-ia-portal` fixa este projeto como submódulo Git em um commit revisado. O build Docker executa `npm ci`/Vite e copia apenas os arquivos estáticos para o webroot do host API. Atualizações de UI exigem atualizar o ponteiro do submódulo e passar também pelos testes de integração da API.
 
-Temas disponíveis: Bosque (padrão), Grafite, Oceano, Claro, Lavanda, Pôr do sol, Âmbar e Rosa. O seletor apresenta amostras de fundo, painel e cor de destaque junto a uma mini prévia; a seleção é local ao browser e não afeta configurações/contas no servidor.
+A aparência destaca uma matriz de cores sem presets visíveis: arraste para escolher saturação/brilho, use a faixa de matiz e confira a prévia ou informe HEX. Tab percorre os eixos da matriz; setas ajustam e Home/End levam aos limites. HEX inválido mostra erro sem alterar a cor; Escape restaura o rascunho e, fora do campo, fecha o menu devolvendo foco ao acionador. Um switch controla o modo escuro, independentemente dos onze estilos. Cor, modo, estilo e idioma são salvos por conta em `GET/PUT /api/v1/portal/preferences`, com `appearance: { primary, mode, style }`. O banco prevalece no login, inclusive para defaults, e restaura a seleção em outro navegador sem cache. `garage-watch.color.v1` e `garage-watch.theme-style.v1` continuam como cache inicial/anônimo; não são importados silenciosamente para outra conta. Registros/servidores legados usam o preset equivalente e estilo conservador. Edições são agrupadas por 350 ms, com uma requisição ativa e somente a seleção mais recente pendente. Falha mantém a aparência local e exibe o aviso de comunicação com **Tentar novamente**; leitura inicial falha não autoriza sobrescrever o banco. Aguarde a confirmação HTTP antes de reload/logout: sair antes dela ou sem rede pode perder a última edição no servidor. Não há sincronização push nem coleção de presets pessoais; entre dispositivos, o último salvamento confirmado vence. A API precisa estar atualizada com a migration `AddPortalAppearance` antes de disponibilizar este consumidor.
 
 No monitoramento autenticado, o vídeo ao vivo inicia automaticamente sem áudio; o usuário pode ativar o som nos controles. O player usa HLS nativo quando declarado pelo navegador e recorre ao HLS.js quando necessário; os buffers limitados se aplicam ao caminho HLS.js (meta 12 s, máximo 18 s, 6 s anteriores e limite de 48 MB). Isso não é um histórico de 15 minutos. A identidade efêmera de presença fica em `sessionStorage` para manter a mesma aba ao recarregar, sem cookie/localStorage nem persistência no servidor.
 
@@ -58,6 +62,14 @@ Execute as verificações a partir do repositório de contexto com `./garage ver
 O ensaio browser automatizado parcial de CT02 roda com `./garage test-ct02-web`: por padrão, usa Chromium headless em desktop e viewport mobile emulado, autentica pela UI, confirma negação anônima de catálogo/playlist e observa playback decodificado por 10 min. Credenciais vêm de `CT02_USERNAME`/`CT02_PASSWORD` no ambiente ou `AUTH_USERNAME`/`AUTH_PASSWORD` no `.env` raiz; nunca são impressas. `CT02_BASE_URL` e `CT02_DURATION_SECONDS` podem ajustar destino e duração. Não reinicia serviços. Mobile emulado não é celular físico, e sem timestamp de origem validado o teste não mede latência fonte→tela nem p95; portanto não conclui CT02.
 
 ## Limites
+
+### Revisão visual federada
+
+`./home-ia test-federation-web` inclui `e2e/themeStyles.spec.ts`: onze estilos em
+claro/escuro, seis exports reais, CSS computado/sentinelas, 320 px, axe e movimento
+reduzido. A API do ensaio é sintética e requests desconhecidos são bloqueados;
+nenhuma credencial ou captura real é usada. As imagens em `test-results/` são
+evidência de inspeção, não baselines de comparação pixel a pixel.
 
 Cadastro local aceita senha mínima de 6 caracteres conforme ADR042, inclusive números; isso é permitido somente no perfil loopback e não habilita acesso LAN. OTP/e-mail não está implementado. O frontend não homologa câmera, HLS em browser real, rede ou operação prolongada.
 

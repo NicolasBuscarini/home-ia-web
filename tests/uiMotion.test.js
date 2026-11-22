@@ -30,10 +30,8 @@ describe('UI motion accessibility contract', () => {
   it('adds theme-driven ambient lighting and neon accents without a runtime dependency', () => {
     expect(stylesheet).toContain('body::before');
     expect(stylesheet).toContain('ellipse 42rem 34rem at 8% 6%');
-    expect(stylesheet).toContain('animation: ambient-drift var(--style-ambient-duration) ease-in-out');
-    expect(stylesheet).toContain(
-      'animation: light-drift var(--style-ambient-duration) ease-in-out infinite alternate',
-    );
+    expect(stylesheet).toContain('animation: var(--style-ambient-animation);');
+    expect(stylesheet).toContain('animation: var(--style-light-animation);');
     expect(stylesheet).toContain('@keyframes light-drift');
     expect(stylesheet).toContain('color-mix(in srgb, var(--accent) 27%, transparent)');
     expect(stylesheet).toContain('color-mix(in srgb, var(--accent-strong) 22%, transparent)');
@@ -104,7 +102,19 @@ describe('UI motion accessibility contract', () => {
 });
 
 describe('Theme style contract', () => {
-  const styles = ['classic', 'modern', 'rustic', 'corporate', 'minimal'];
+  const styles = [
+    'classic',
+    'modern',
+    'rustic',
+    'corporate',
+    'minimal',
+    'frutiger-aero',
+    'neo-brutalism',
+    'glassmorphism',
+    'neumorphism',
+    'retro-pixel',
+    'claymorphism',
+  ];
 
   const block = (style) =>
     new RegExp(`\\[data-theme-style="${style}"\\]\\s*\\{([^}]*)\\}`, 's').exec(stylesheet)?.[1] ?? '';
@@ -119,9 +129,7 @@ describe('Theme style contract', () => {
   });
 
   it('makes the style families visibly different in shape, border and motion', () => {
-    const radii = styles.map((style) => token(style, '--style-radius-card'));
     const motions = styles.map((style) => token(style, '--style-motion'));
-    expect(new Set(radii).size).toBe(styles.length);
     expect(new Set(motions).size).toBe(styles.length);
     expect(token('rustic', '--style-border-width')).toBe('2px');
     expect(token('corporate', '--style-border-width-strong')).toBe('2px');
@@ -132,11 +140,49 @@ describe('Theme style contract', () => {
     expect(token('minimal', '--style-hover-lift')).toBe('0px');
   });
 
+  it('fully re-skins surfaces for the new Frutiger Aero and Neo Brutalism styles', () => {
+    expect(token('neo-brutalism', '--style-radius-card')).toBe('0px');
+    expect(token('neo-brutalism', '--style-border-width')).toBe('2px');
+    expect(token('neo-brutalism', '--style-border-color')).toBe('var(--text-primary)');
+    expect(token('neo-brutalism', '--style-surface-bg')).toBe('var(--panel-bg)');
+    expect(token('neo-brutalism', '--style-panel-blur')).toBe('0px');
+    expect(token('neo-brutalism', '--style-shadow-panel')).toContain('0.4rem 0.4rem 0 0');
+
+    expect(token('frutiger-aero', '--style-radius-card')).toBe('1.75rem');
+    expect(token('frutiger-aero', '--style-panel-blur')).toBe('26px');
+    expect(token('frutiger-aero', '--style-surface-bg')).toContain('74%');
+    expect(token('frutiger-aero', '--style-button-radius')).toBe('999px');
+    expect(token('frutiger-aero', '--style-panel-texture')).toContain('linear-gradient');
+  });
+
+  it('re-skins surfaces for Glassmorphism, Neumorphism, Retro Pixel and Claymorphism', () => {
+    expect(token('glassmorphism', '--style-surface-bg')).toContain('58%');
+    expect(token('glassmorphism', '--style-panel-blur')).toBe('30px');
+    expect(token('glassmorphism', '--style-radius-card')).toBe('1.5rem');
+
+    expect(token('neumorphism', '--style-surface-bg')).toBe('var(--panel-bg)');
+    expect(token('neumorphism', '--style-panel-blur')).toBe('0px');
+    expect(token('neumorphism', '--style-shadow-panel')).toContain('-6px -6px');
+
+    expect(token('retro-pixel', '--style-radius-card')).toBe('0px');
+    expect(token('retro-pixel', '--style-font-body')).toContain('monospace');
+    expect(token('retro-pixel', '--style-easing')).toContain('steps');
+    expect(token('retro-pixel', '--style-border-color')).toBe('var(--text-primary)');
+
+    expect(token('claymorphism', '--style-radius-card')).toBe('2rem');
+    expect(token('claymorphism', '--style-surface-bg')).toBe('var(--panel-bg)');
+    expect(token('claymorphism', '--style-shadow-panel')).toContain('inset 0 4px');
+  });
+
   it('runs component form through shared tokens instead of per-style component copies', () => {
     expect(stylesheet).toContain('--style-border-style');
     expect(stylesheet).toContain('--style-radius-card');
     expect(stylesheet).toContain('--style-button-radius');
     expect(stylesheet).toContain('--style-motion');
+    expect(stylesheet).toContain('--style-surface-bg');
+    expect(stylesheet).toContain('--style-border-color');
+    expect(stylesheet).toContain('background: var(--style-surface-bg);');
+    expect(stylesheet).toContain('border: 1px solid var(--style-border-color);');
     expect(stylesheet).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--style-button-radius\);/s);
     expect(stylesheet).toMatch(/\.panel-card[\s\S]*?border-width:\s*var\(--style-border-width\);/);
   });

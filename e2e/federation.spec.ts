@@ -48,6 +48,7 @@ test.beforeEach(async ({ page }) => {
             menuIcon: 'camera',
             menuLabelKey: 'modules.monitoring.menu',
             route: '/modules/monitoring',
+            items: [{ itemId: 'monitor', labelKey: 'nav.monitor', sortOrder: 1 }],
           },
           {
             moduleId: 'activitywatch',
@@ -58,6 +59,7 @@ test.beforeEach(async ({ page }) => {
             menuIcon: 'activity',
             menuLabelKey: 'modules.activitywatch.menu',
             route: '/modules/activitywatch',
+            items: [],
           },
           {
             moduleId: 'administration',
@@ -68,6 +70,11 @@ test.beforeEach(async ({ page }) => {
             menuIcon: 'settings',
             menuLabelKey: 'modules.administration.menu',
             route: '/modules/administration',
+            items: ['users', 'profiles', 'requests', 'systems'].map((itemId, sortOrder) => ({
+              itemId,
+              labelKey: `nav.${itemId}`,
+              sortOrder,
+            })),
           },
         ],
       }),

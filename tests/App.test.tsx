@@ -1,5 +1,6 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { contrastRatio, derivePalette, THEME_STYLES } from 'home-ia-shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
@@ -26,31 +27,101 @@ beforeEach(() => {
 });
 
 describe('application shell', () => {
-  it('restores an unauthenticated session and allows choosing a persistent theme', async () => {
+  it('restores an unauthenticated session and allows choosing a persistent color', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ authenticated: false }));
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Entre no painel' })).toBeInTheDocument();
-    await user.click(screen.getByText('Bosque', { selector: 'strong' }));
-    await user.click(screen.getByRole('button', { name: 'Usar o tema Oceano' }));
-    expect(document.documentElement).toHaveAttribute('data-theme', 'ocean');
-    expect(localStorage.getItem('garage-watch.theme.v1')).toBe('ocean');
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#8ecbff{Enter}');
+    expect(document.documentElement).toHaveAttribute('data-bs-theme', 'dark');
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}')).toEqual({
+      primary: '#8ecbff',
+      mode: 'dark',
+    });
   });
 
-  it('shows color previews for all available themes and applies a selected preview', async () => {
+  it('features the color matrix without presets and synchronizes the selected preview', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ authenticated: false }));
     document.head.innerHTML = '<meta name="theme-color" content="#101615">';
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole('heading', { name: 'Entre no painel' });
     expect(screen.getByRole('heading', { name: 'Monitoramento', level: 1 })).toBeInTheDocument();
-    await user.click(screen.getByText('Bosque', { selector: 'strong' }));
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
     expect(document.querySelector('.theme-selector')).toHaveAttribute('open');
-    expect(screen.getByText('Bosque', { selector: 'strong' })).toBeVisible();
-    expect(screen.getAllByRole('button', { name: /^Usar o tema/ })).toHaveLength(8);
-    await user.click(screen.getByRole('button', { name: 'Usar o tema Lavanda' }));
-    expect(document.documentElement).toHaveAttribute('data-theme', 'lavender');
-    expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute('content', '#191526');
+    expect(screen.queryByText('Predefinidos')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /^Usar o tema/ })).toHaveLength(0);
+    expect(screen.getByRole('group', { name: 'Matriz de cores' })).toBeVisible();
+    for (const [index, style] of THEME_STYLES.entries()) {
+      const foreground =
+        contrastRatio('#000000', style.preview.background) >=
+        contrastRatio('#ffffff', style.preview.background)
+          ? '#000000'
+          : '#ffffff';
+      const sample = document.querySelectorAll('.theme-style-preview')[index];
+      expect(sample).toHaveStyle({ color: foreground });
+      expect(contrastRatio(foreground, style.preview.background)).toBeGreaterThanOrEqual(4.5);
+    }
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#c7a9ff{Enter}');
+    expect(screen.getByRole('status', { name: 'Cor selecionada' })).toHaveTextContent('#c7a9ff');
+    expect(document.documentElement).toHaveAttribute('data-bs-theme', 'dark');
+    expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute(
+      'content',
+      derivePalette('#c7a9ff', 'dark', 'balanced').variables['--app-bg'],
+    );
+  });
+
+  it('edits matrix coordinates, switches mode and restores both after remount', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ authenticated: false }));
+    const user = userEvent.setup();
+    const view = render(<App />);
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    await user.click(document.querySelector('.theme-trigger') as HTMLElement);
+    fireEvent.change(screen.getByRole('slider', { name: 'Matiz' }), { target: { value: '0' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Saturação' }), { target: { value: '50' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Brilho' }), { target: { value: '50' } });
+    await user.click(screen.getByRole('switch', { name: 'Modo escuro' }));
+    const expected = { primary: '#804040', mode: 'light' };
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}')).toEqual(expected);
+    expect(document.documentElement).toHaveAttribute('data-bs-theme', 'light');
+    view.unmount();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe(
+      derivePalette(expected.primary, 'light', 'balanced').variables['--accent'],
+    );
+  });
+
+  it('rejects invalid HEX without changing the color, restores drafts and retains hue through black', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ authenticated: false }));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Entre no painel' });
+    const trigger = document.querySelector('.theme-trigger') as HTMLElement;
+    await user.click(trigger);
+    const hex = screen.getByRole('textbox', { name: 'Hex' });
+    await user.clear(hex);
+    await user.type(hex, '#zz{Enter}');
+    expect(hex).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Informe uma cor válida');
+    expect(JSON.parse(localStorage.getItem('garage-watch.color.v1') ?? '{}').primary).toBe('#8ce0b4');
+    await user.keyboard('{Escape}');
+    expect(hex).toHaveValue('#8ce0b4');
+    expect(document.querySelector('.theme-selector')).toHaveAttribute('open');
+    fireEvent.change(screen.getByRole('slider', { name: 'Brilho' }), { target: { value: '0' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Matiz' }), { target: { value: '240' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Saturação' }), { target: { value: '100' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Brilho' }), { target: { value: '100' } });
+    expect(hex).toHaveValue('#0000ff');
+    await user.click(screen.getByRole('slider', { name: 'Matiz' }));
+    await user.keyboard('{Escape}');
+    expect(document.querySelector('.theme-selector')).not.toHaveAttribute('open');
+    expect(trigger).toHaveFocus();
   });
 
   it('changes all shell language strings and persists the locale selection', async () => {

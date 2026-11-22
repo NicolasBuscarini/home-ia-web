@@ -3,10 +3,10 @@ import ReactDOM from 'react-dom/client';
 import '@fontsource-variable/inter';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'home-ia-shared/styles.css';
-import { applyTheme, readSavedTheme } from 'home-ia-shared';
+import { applyAppearance, readSavedColor, readSavedThemeStyle } from 'home-ia-shared';
 import App from './App';
 
-applyTheme(readSavedTheme());
+applyAppearance(readSavedColor(), readSavedThemeStyle());
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Elemento raiz do aplicativo não encontrado.');

@@ -1,4 +1,4 @@
-import type { ThemeId, ThemeStyleId, UserRole } from 'home-ia-shared';
+import type { ThemeColor, ThemeStyleId, UserRole } from 'home-ia-shared';
 import { LOCALES, type Locale, useI18n } from 'home-ia-shared';
 import { ThemeSelector } from './ThemeSelector';
 
@@ -6,8 +6,8 @@ interface AppHeaderProps {
   role?: UserRole;
   username?: string;
   activeClients?: string;
-  theme: ThemeId;
-  onThemeChange: (theme: ThemeId) => void;
+  color: ThemeColor;
+  onColorChange: (color: ThemeColor) => void;
   themeStyle: ThemeStyleId;
   onThemeStyleChange: (style: ThemeStyleId) => void;
   onLogout: () => void;
@@ -24,8 +24,8 @@ export function AppHeader({
   role,
   username,
   activeClients,
-  theme,
-  onThemeChange,
+  color,
+  onColorChange,
   themeStyle,
   onThemeStyleChange,
   onLogout,
@@ -85,8 +85,8 @@ export function AppHeader({
             ))}
           </select>
           <ThemeSelector
-            value={theme}
-            onChange={onThemeChange}
+            value={color}
+            onChange={onColorChange}
             style={themeStyle}
             onStyleChange={onThemeStyleChange}
           />

@@ -1,21 +1,13 @@
 import type { AuthenticatedUser, CameraStatus, TranslationKey, UserRole } from 'home-ia-shared';
 import {
   ApiError,
-  applyTheme,
-  applyThemeStyle,
   getJson,
   I18nProvider,
-  isLocale,
-  isThemeId,
   moduleDeepLinkParams,
   parseDeepLink,
   postJson,
-  readSavedTheme,
-  readSavedThemeStyle,
   request,
   serializeDeepLink,
-  type ThemeId,
-  type ThemeStyleId,
   useI18n,
 } from 'home-ia-shared';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -24,7 +16,8 @@ import { AuthenticationPanel } from './features/auth/AuthenticationPanel';
 import { UserLanding } from './features/auth/UserLanding';
 import { PortalModuleBoundary } from './portal/PortalModuleBoundary';
 import { shellEvents } from './portal/platformEvents';
-import { getPortalNavigation, getPortalPreferences, savePortalPreferences } from './portal/portalApi';
+import { getPortalNavigation } from './portal/portalApi';
+import { useAppearancePreferences } from './portal/useAppearancePreferences';
 import { getOrCreateClientId } from './services/clientIdentity';
 
 type ScreenState = 'loading' | 'anonymous' | 'authenticated' | 'error';
@@ -52,7 +45,19 @@ function validateRole(role: string): role is UserRole {
 }
 
 function AppContent() {
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale } = useI18n();
+  const {
+    color,
+    themeStyle,
+    setColor,
+    setThemeStyle,
+    failed: appearanceFailed,
+    load: loadAppearance,
+    reset: resetAppearance,
+    retry: retryAppearance,
+  } = useAppearancePreferences();
+  const translate = useRef(t);
+  translate.current = t;
   const [screen, setScreen] = useState<ScreenState>('loading');
   const [role, setRole] = useState<UserRole>();
   const [canMonitor, setCanMonitor] = useState(false);
@@ -60,8 +65,6 @@ function AppContent() {
   const [cameras, setCameras] = useState<CameraStatus[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>();
   const [error, setError] = useState('');
-  const [theme, setTheme] = useState<ThemeId>(readSavedTheme);
-  const [themeStyle, setThemeStyle] = useState<ThemeStyleId>(readSavedThemeStyle);
   const [clientCount, setClientCount] = useState<string>();
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [portalModuleIds, setPortalModuleIds] = useState<string[]>();
@@ -94,33 +97,11 @@ function AppContent() {
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pollInFlight = useRef(false);
-  const portalPreferencesReady = useRef(false);
-
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    applyThemeStyle(themeStyle);
-  }, [themeStyle]);
-
-  useEffect(() => {
-    if (screen !== 'authenticated') {
-      portalPreferencesReady.current = false;
-      return;
-    }
-    if (!portalPreferencesReady.current) {
-      portalPreferencesReady.current = true;
-      return;
-    }
-    void savePortalPreferences(theme, locale).catch(() => {
-      // The local preference remains active if the portal is unavailable.
-    });
-  }, [screen, theme, locale]);
 
   const loadPortalContext = useCallback(async (): Promise<void> => {
+    const appearance = loadAppearance();
     try {
-      const [navigation, preferences] = await Promise.all([getPortalNavigation(), getPortalPreferences()]);
+      const navigation = await getPortalNavigation();
       setPortalModuleIds(navigation.modules.map((module) => module.moduleId));
       setPortalSubmodules(
         Object.fromEntries(
@@ -130,17 +111,14 @@ function AppContent() {
           ]),
         ),
       );
-      if (!preferences.isDefault) {
-        if (isThemeId(preferences.themeId)) setTheme(preferences.themeId);
-        if (isLocale(preferences.languageTag)) setLocale(preferences.languageTag);
-      }
     } catch {
       // The legacy dashboard remains usable if the portal projection is unavailable. Keep the
       // requested module parameters so a deep link survives a portal outage window too.
       setPortalModuleIds(undefined);
       setPortalSubmodules(undefined);
     }
-  }, [setLocale]);
+    await appearance;
+  }, [loadAppearance]);
 
   const loadAuthenticatedState = useCallback(async (): Promise<void> => {
     const user = await getJson<AuthenticatedUser>('/api/v1/auth/me');
@@ -169,6 +147,7 @@ function AppContent() {
   const checkSession = useCallback(async () => {
     const session = await getJson<{ authenticated: boolean }>('/api/v1/auth/session');
     if (!session.authenticated) {
+      resetAppearance();
       setRole(undefined);
       setCanMonitor(false);
       setUsername(undefined);
@@ -181,20 +160,20 @@ function AppContent() {
       return;
     }
     await loadAuthenticatedState();
-  }, [loadAuthenticatedState]);
+  }, [loadAuthenticatedState, resetAppearance]);
 
   useEffect(() => {
     let active = true;
     void checkSession().catch(() => {
       if (active) {
         setScreen('error');
-        setError(t('app.error.session'));
+        setError(translate.current('app.error.session'));
       }
     });
     return () => {
       active = false;
     };
-  }, [checkSession, t]);
+  }, [checkSession]);
 
   useEffect(() => {
     if (screen !== 'authenticated' || !role || !canMonitor) return;
@@ -207,6 +186,7 @@ function AppContent() {
         if (!active) return;
         setError('');
         if (!session.authenticated) {
+          resetAppearance();
           setScreen('anonymous');
           setRole(undefined);
           setCanMonitor(false);
@@ -244,6 +224,7 @@ function AppContent() {
       } catch (failure) {
         if (active) {
           if (failure instanceof ApiError && failure.status === 401) {
+            resetAppearance();
             setScreen('anonymous');
             setRole(undefined);
             setCanMonitor(false);
@@ -265,7 +246,7 @@ function AppContent() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [screen, role, canMonitor, t]);
+  }, [screen, role, canMonitor, t, resetAppearance]);
 
   useEffect(() => {
     if (screen !== 'authenticated' || !role || !canMonitor) return;
@@ -313,6 +294,7 @@ function AppContent() {
   }, [screen, role, canMonitor]);
 
   async function logout() {
+    resetAppearance();
     setLogoutBusy(true);
     try {
       await postJson('/api/v1/auth/logout', {});
@@ -615,13 +597,21 @@ function AppContent() {
         role={screen === 'authenticated' ? role : undefined}
         username={screen === 'authenticated' ? username : undefined}
         activeClients={screen === 'authenticated' && canMonitor ? clientCount : undefined}
-        theme={theme}
-        onThemeChange={setTheme}
+        color={color}
+        onColorChange={setColor}
         themeStyle={themeStyle}
         onThemeStyleChange={setThemeStyle}
         onLogout={() => void logout()}
         busy={logoutBusy}
       />
+      {screen === 'authenticated' && appearanceFailed && (
+        <section className="panel-card feedback-panel" role="alert">
+          <p>{t('app.error.offline')}</p>
+          <button className="btn btn-outline-secondary" type="button" onClick={() => void retryAppearance()}>
+            {t('app.error.retry')}
+          </button>
+        </section>
+      )}
       {screen === 'loading' && (
         <section className="panel-card feedback-panel" role="status" aria-live="polite">
           <span className="eyebrow">{t('app.loading.eyebrow')}</span>
